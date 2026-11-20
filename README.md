@@ -1,0 +1,24 @@
+# Inha App
+
+Android-приложение для студентов **Inha University (Ташкент)** в стиле **Material 3 (Dynamic Color / Material You)** с полным локальным хранением данных на телефоне в **SQLite**.
+
+## Возможности
+- **eClass (`eclass.inha.ac.kr`)** — быстрый Moodle Mobile JSON API (`core_enrol_get_users_courses`, `mod_assign_get_assignments`, `mod_assign_get_submission_status`, `core_course_get_contents`, `gradereport_overview_get_course_grades`, `webservice/upload.php`) + HTML-фолбэк для посещаемости (`local/ubattendance`) и подробных оценок.
+  - Переключатель **Текущий семестр / Все курсы**.
+  - Скачивание файлов курса (`ubfile`) и вложений заданий в 1 клик с локальным кэшированием.
+  - Загрузка и сдача файлов в задания прямо с телефона (с сохранением ранее загруженных файлов).
+  - Быстрый переход к силлабусу.
+- **INS (`ins.inha.uz`)** — прямое подключение с телефона без прокси: оценки по семестрам, GPA, кредиты, ранг и транскрипт (XML EUC-KR + HTML fallback).
+- **Расписание (`iut.edupage.org`)** — выбор группы, ближайшая пара с обратным отсчётом по Ташкенту (UTC+5), расписание по дням недели.
+- **Гибридные уведомления**:
+  - Офлайн-напоминания о парах за 5 / 10 / 15 / 30 / 60 минут (еженедельно, `Asia/Tashkent`).
+  - Офлайн-напоминания о дедлайнах несданных заданий за 24 часа и 2 часа.
+  - Опциональная фоновая проверка новых заданий eClass через нативный Android **WorkManager** (включается в Настройках, интервал 1ч / 2ч / 4ч).
+- **Material 3** — Dynamic Color от обоев телефона + синий акцент Inha по умолчанию, светлая/тёмная/системная тема, русский и английский интерфейс.
+
+## Сборка APK
+
+```bash
+flutter pub get
+flutter build apk --release --target-platform android-arm64
+```

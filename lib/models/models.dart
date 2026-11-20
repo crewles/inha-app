@@ -1,0 +1,544 @@
+import 'dart:convert';
+
+class UserCredentials {
+  final String studentId;
+  final String eclassPassword;
+  final String? insPassword;
+  final String? eclassToken;
+
+  const UserCredentials({
+    required this.studentId,
+    required this.eclassPassword,
+    this.insPassword,
+    this.eclassToken,
+  });
+
+  UserCredentials copyWith({
+    String? studentId,
+    String? eclassPassword,
+    String? insPassword,
+    bool clearInsPassword = false,
+    String? eclassToken,
+    bool clearToken = false,
+  }) {
+    return UserCredentials(
+      studentId: studentId ?? this.studentId,
+      eclassPassword: eclassPassword ?? this.eclassPassword,
+      insPassword: clearInsPassword ? null : (insPassword ?? this.insPassword),
+      eclassToken: clearToken ? null : (eclassToken ?? this.eclassToken),
+    );
+  }
+}
+
+class Course {
+  final String id;
+  final String name;
+  final int category;
+  final bool isCurrent;
+  final String? overviewGrade;
+  final int updatedAt;
+
+  const Course({
+    required this.id,
+    required this.name,
+    this.category = 0,
+    this.isCurrent = true,
+    this.overviewGrade,
+    this.updatedAt = 0,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'name': name,
+        'category': category,
+        'is_current': isCurrent ? 1 : 0,
+        'overview_grade': overviewGrade,
+        'updated_at': updatedAt,
+      };
+
+  factory Course.fromMap(Map<String, dynamic> m) => Course(
+        id: m['id'] as String,
+        name: m['name'] as String,
+        category: (m['category'] as int?) ?? 0,
+        isCurrent: ((m['is_current'] as int?) ?? 1) == 1,
+        overviewGrade: m['overview_grade'] as String?,
+        updatedAt: (m['updated_at'] as int?) ?? 0,
+      );
+}
+
+class AssignmentFile {
+  final String name;
+  final String link;
+  final int size;
+
+  const AssignmentFile({
+    required this.name,
+    required this.link,
+    this.size = 0,
+  });
+
+  Map<String, dynamic> toJson() => {'name': name, 'link': link, 'size': size};
+
+  factory AssignmentFile.fromJson(Map<String, dynamic> j) => AssignmentFile(
+        name: (j['name'] as String?) ?? 'file',
+        link: (j['link'] as String?) ?? '',
+        size: (j['size'] as int?) ?? 0,
+      );
+}
+
+class Assignment {
+  final String id;
+  final int? assignId;
+  final String courseId;
+  final String courseName;
+  final String name;
+  final String due;
+  final int dueTimestamp; // Unix seconds (0 if no due date)
+  final String status;
+  final String? grade;
+  final String? gradeMax;
+  final String? url;
+  final List<AssignmentFile> files;
+  final int updatedAt;
+
+  const Assignment({
+    required this.id,
+    this.assignId,
+    required this.courseId,
+    required this.courseName,
+    required this.name,
+    required this.due,
+    this.dueTimestamp = 0,
+    required this.status,
+    this.grade,
+    this.gradeMax,
+    this.url,
+    this.files = const [],
+    this.updatedAt = 0,
+  });
+
+  bool get isSubmitted {
+    final s = status.toLowerCase();
+    return s.contains('submitted') ||
+        s.contains('сдано') ||
+        s.contains('отправлено') ||
+        s.contains('graded');
+  }
+
+  String? get gradeDisplay {
+    if (grade == null || grade!.isEmpty) return null;
+    if (gradeMax != null && gradeMax!.isNotEmpty) {
+      return '$grade / $gradeMax';
+    }
+    return grade;
+  }
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'assign_id': assignId,
+        'course_id': courseId,
+        'course_name': courseName,
+        'name': name,
+        'due': due,
+        'due_timestamp': dueTimestamp,
+        'status': status,
+        'grade': grade,
+        'grade_max': gradeMax,
+        'url': url,
+        'files_json': jsonEncode(files.map((f) => f.toJson()).toList()),
+        'updated_at': updatedAt,
+      };
+
+  factory Assignment.fromMap(Map<String, dynamic> m) {
+    List<AssignmentFile> parsedFiles = [];
+    final raw = m['files_json'] as String?;
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final list = jsonDecode(raw) as List<dynamic>;
+        parsedFiles = list
+            .map((e) => AssignmentFile.fromJson(e as Map<String, dynamic>))
+            .toList();
+      } catch (_) {}
+    }
+    return Assignment(
+      id: m['id'] as String,
+      assignId: m['assign_id'] as int?,
+      courseId: m['course_id'] as String,
+      courseName: (m['course_name'] as String?) ?? '',
+      name: m['name'] as String,
+      due: (m['due'] as String?) ?? '',
+      dueTimestamp: (m['due_timestamp'] as int?) ?? 0,
+      status: (m['status'] as String?) ?? '',
+      grade: m['grade'] as String?,
+      gradeMax: m['grade_max'] as String?,
+      url: m['url'] as String?,
+      files: parsedFiles,
+      updatedAt: (m['updated_at'] as int?) ?? 0,
+    );
+  }
+}
+
+class OpenAssignment {
+  final int id;
+  final String name;
+  final int dueTimestamp;
+  final bool drafts;
+
+  const OpenAssignment({
+    required this.id,
+    required this.name,
+    required this.dueTimestamp,
+    required this.drafts,
+  });
+}
+
+class GradeItem {
+  final String courseId;
+  final String name;
+  final String value;
+
+  const GradeItem({
+    required this.courseId,
+    required this.name,
+    required this.value,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'course_id': courseId,
+        'name': name,
+        'value': value,
+      };
+
+  factory GradeItem.fromMap(Map<String, dynamic> m) => GradeItem(
+        courseId: m['course_id'] as String,
+        name: m['name'] as String,
+        value: m['value'] as String,
+      );
+}
+
+class AttendanceRecord {
+  final String date;
+  final String className;
+  final String attendance;
+  final String absence;
+  final String late;
+  final String others;
+
+  const AttendanceRecord({
+    required this.date,
+    required this.className,
+    required this.attendance,
+    required this.absence,
+    required this.late,
+    required this.others,
+  });
+
+  String get statusType {
+    if (attendance.trim() == '○' || attendance.trim().isNotEmpty) {
+      return 'present';
+    }
+    if (absence.trim().isNotEmpty) return 'absent';
+    if (late.trim().isNotEmpty) return 'late';
+    return 'other';
+  }
+
+  Map<String, dynamic> toJson() => {
+        'date': date,
+        'class': className,
+        'attendance': attendance,
+        'absence': absence,
+        'late': late,
+        'others': others,
+      };
+
+  factory AttendanceRecord.fromJson(Map<String, dynamic> j) => AttendanceRecord(
+        date: (j['date'] as String?) ?? '',
+        className: (j['class'] as String?) ?? '',
+        attendance: (j['attendance'] as String?) ?? '',
+        absence: (j['absence'] as String?) ?? '',
+        late: (j['late'] as String?) ?? '',
+        others: (j['others'] as String?) ?? '',
+      );
+}
+
+class AttendanceData {
+  final String courseId;
+  final int attendanceCount;
+  final int absenceCount;
+  final int lateCount;
+  final int othersCount;
+  final List<AttendanceRecord> records;
+  final int updatedAt;
+
+  const AttendanceData({
+    required this.courseId,
+    required this.attendanceCount,
+    required this.absenceCount,
+    required this.lateCount,
+    required this.othersCount,
+    required this.records,
+    this.updatedAt = 0,
+  });
+
+  int get total => attendanceCount + absenceCount + lateCount + othersCount;
+  double get percentage => total > 0 ? (attendanceCount / total) * 100.0 : 0.0;
+
+  Map<String, dynamic> toMap() => {
+        'course_id': courseId,
+        'attendance_count': attendanceCount,
+        'absence_count': absenceCount,
+        'late_count': lateCount,
+        'others_count': othersCount,
+        'records_json': jsonEncode(records.map((r) => r.toJson()).toList()),
+        'updated_at': updatedAt,
+      };
+
+  factory AttendanceData.fromMap(Map<String, dynamic> m) {
+    List<AttendanceRecord> recs = [];
+    final raw = m['records_json'] as String?;
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final list = jsonDecode(raw) as List<dynamic>;
+        recs = list
+            .map((e) => AttendanceRecord.fromJson(e as Map<String, dynamic>))
+            .toList();
+      } catch (_) {}
+    }
+    return AttendanceData(
+      courseId: m['course_id'] as String,
+      attendanceCount: (m['attendance_count'] as int?) ?? 0,
+      absenceCount: (m['absence_count'] as int?) ?? 0,
+      lateCount: (m['late_count'] as int?) ?? 0,
+      othersCount: (m['others_count'] as int?) ?? 0,
+      records: recs,
+      updatedAt: (m['updated_at'] as int?) ?? 0,
+    );
+  }
+}
+
+class CourseFile {
+  final int? id;
+  final String courseId;
+  final String name;
+  final String url;
+  final int size;
+  final String? localPath;
+
+  const CourseFile({
+    this.id,
+    required this.courseId,
+    required this.name,
+    required this.url,
+    this.size = 0,
+    this.localPath,
+  });
+
+  CourseFile copyWith({String? localPath}) => CourseFile(
+        id: id,
+        courseId: courseId,
+        name: name,
+        url: url,
+        size: size,
+        localPath: localPath ?? this.localPath,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'course_id': courseId,
+        'name': name,
+        'url': url,
+        'size': size,
+        'local_path': localPath,
+      };
+
+  factory CourseFile.fromMap(Map<String, dynamic> m) => CourseFile(
+        id: m['id'] as int?,
+        courseId: m['course_id'] as String,
+        name: m['name'] as String,
+        url: m['url'] as String,
+        size: (m['size'] as int?) ?? 0,
+        localPath: m['local_path'] as String?,
+      );
+}
+
+class InsCourseGrade {
+  final String courseNumber;
+  final String title;
+  final String credit;
+  final String grade;
+  final String courseType;
+  final String semester;
+  final String yearterm;
+  final String professor;
+  final String classNumber;
+
+  const InsCourseGrade({
+    required this.courseNumber,
+    required this.title,
+    required this.credit,
+    required this.grade,
+    this.courseType = '',
+    this.semester = '',
+    this.yearterm = '',
+    this.professor = '',
+    this.classNumber = '',
+  });
+
+  Map<String, dynamic> toMap() => {
+        'course_number': courseNumber,
+        'title': title,
+        'credit': credit,
+        'grade': grade,
+        'course_type': courseType,
+        'semester': semester,
+        'yearterm': yearterm,
+        'professor': professor,
+        'class_number': classNumber,
+      };
+
+  factory InsCourseGrade.fromMap(Map<String, dynamic> m) => InsCourseGrade(
+        courseNumber: (m['course_number'] as String?) ?? '',
+        title: (m['title'] as String?) ?? '',
+        credit: (m['credit'] as String?) ?? '',
+        grade: (m['grade'] as String?) ?? '',
+        courseType: (m['course_type'] as String?) ?? '',
+        semester: (m['semester'] as String?) ?? '',
+        yearterm: (m['yearterm'] as String?) ?? '',
+        professor: (m['professor'] as String?) ?? '',
+        classNumber: (m['class_number'] as String?) ?? '',
+      );
+}
+
+class InsGradeData {
+  final List<InsCourseGrade> courses;
+  final Map<String, String> gpaInfo;
+  final Map<String, String> studentInfo;
+  final int updatedAt;
+
+  const InsGradeData({
+    required this.courses,
+    required this.gpaInfo,
+    required this.studentInfo,
+    this.updatedAt = 0,
+  });
+}
+
+class ScheduleEntry {
+  final String cardId;
+  final String lessonId;
+  final List<String> days;
+  final String periodStart;
+  final String periodEnd;
+  final String subject;
+  final List<String> teachers;
+  final List<String> classes;
+  final List<String> classrooms;
+  final int durationPeriods;
+
+  const ScheduleEntry({
+    required this.cardId,
+    required this.lessonId,
+    required this.days,
+    required this.periodStart,
+    required this.periodEnd,
+    required this.subject,
+    required this.teachers,
+    required this.classes,
+    required this.classrooms,
+    this.durationPeriods = 1,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'card_id': cardId,
+        'lesson_id': lessonId,
+        'days_json': jsonEncode(days),
+        'period_start': periodStart,
+        'period_end': periodEnd,
+        'subject': subject,
+        'teachers_json': jsonEncode(teachers),
+        'classes_json': jsonEncode(classes),
+        'classrooms_json': jsonEncode(classrooms),
+        'duration_periods': durationPeriods,
+      };
+
+  factory ScheduleEntry.fromMap(Map<String, dynamic> m) => ScheduleEntry(
+        cardId: m['card_id'] as String,
+        lessonId: (m['lesson_id'] as String?) ?? '',
+        days:
+            List<String>.from(jsonDecode((m['days_json'] as String?) ?? '[]')),
+        periodStart: (m['period_start'] as String?) ?? '',
+        periodEnd: (m['period_end'] as String?) ?? '',
+        subject: (m['subject'] as String?) ?? '',
+        teachers: List<String>.from(
+            jsonDecode((m['teachers_json'] as String?) ?? '[]')),
+        classes: List<String>.from(
+            jsonDecode((m['classes_json'] as String?) ?? '[]')),
+        classrooms: List<String>.from(
+            jsonDecode((m['classrooms_json'] as String?) ?? '[]')),
+        durationPeriods: (m['duration_periods'] as int?) ?? 1,
+      );
+}
+
+class AppSettings {
+  final String themeMode; // system | light | dark
+  final bool dynamicColor;
+  final String language; // ru | en
+  final bool hideSubmitted;
+  final bool showAllCourses;
+  final bool notifyAssignments;
+  final bool notifyGrades;
+  final bool notifyTimetable;
+  final int reminderOffsetMinutes;
+  final bool bgSyncEnabled;
+  final int bgSyncIntervalHours;
+  final String timetableGroup;
+  final int lastSyncAt;
+
+  const AppSettings({
+    this.themeMode = 'system',
+    this.dynamicColor = true,
+    this.language = 'ru',
+    this.hideSubmitted = false,
+    this.showAllCourses = false,
+    this.notifyAssignments = true,
+    this.notifyGrades = true,
+    this.notifyTimetable = true,
+    this.reminderOffsetMinutes = 15,
+    this.bgSyncEnabled = false,
+    this.bgSyncIntervalHours = 2,
+    this.timetableGroup = '',
+    this.lastSyncAt = 0,
+  });
+
+  AppSettings copyWith({
+    String? themeMode,
+    bool? dynamicColor,
+    String? language,
+    bool? hideSubmitted,
+    bool? showAllCourses,
+    bool? notifyAssignments,
+    bool? notifyGrades,
+    bool? notifyTimetable,
+    int? reminderOffsetMinutes,
+    bool? bgSyncEnabled,
+    int? bgSyncIntervalHours,
+    String? timetableGroup,
+    int? lastSyncAt,
+  }) {
+    return AppSettings(
+      themeMode: themeMode ?? this.themeMode,
+      dynamicColor: dynamicColor ?? this.dynamicColor,
+      language: language ?? this.language,
+      hideSubmitted: hideSubmitted ?? this.hideSubmitted,
+      showAllCourses: showAllCourses ?? this.showAllCourses,
+      notifyAssignments: notifyAssignments ?? this.notifyAssignments,
+      notifyGrades: notifyGrades ?? this.notifyGrades,
+      notifyTimetable: notifyTimetable ?? this.notifyTimetable,
+      reminderOffsetMinutes:
+          reminderOffsetMinutes ?? this.reminderOffsetMinutes,
+      bgSyncEnabled: bgSyncEnabled ?? this.bgSyncEnabled,
+      bgSyncIntervalHours: bgSyncIntervalHours ?? this.bgSyncIntervalHours,
+      timetableGroup: timetableGroup ?? this.timetableGroup,
+      lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+    );
+  }
+}
