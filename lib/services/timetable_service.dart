@@ -227,4 +227,192 @@ class TimetableService {
     }
     return null;
   }
+
+  static final Set<String> _matchStopWords = {
+    'in',
+    'of',
+    'the',
+    'and',
+    'for',
+    'to',
+    'with',
+    'on',
+    'introduction',
+    'intro',
+    'lab',
+    'lecture',
+    'practice',
+    'tutorial',
+    'course',
+  };
+
+  /// Matches an eClass [courseName] against EduPage [entries] (prioritizing
+  /// [group] when set) to extract professor, classrooms, and weekly slots.
+  static CourseScheduleInfo? matchCourse(
+    String courseName,
+    List<ScheduleEntry> entries, {
+    String group = '',
+  }) {
+    if (courseName.trim().isEmpty || entries.isEmpty) return null;
+
+    final trimmedGroup = group.trim();
+    final pool = trimmedGroup.isNotEmpty
+        ? filterByClass(entries, trimmedGroup)
+        : <ScheduleEntry>[];
+    final candidates = pool.isNotEmpty ? pool : entries;
+
+    final courseNorm = _normalizeSubject(courseName);
+    if (courseNorm.isEmpty) return null;
+    final courseTokens = _tokenizeSubject(courseNorm);
+    final courseLevels = _extractLevels(courseNorm);
+
+    // Group candidate entries by their normalized EduPage subject name.
+    final bySubject = <String, List<ScheduleEntry>>{};
+    for (final e in candidates) {
+      final subjNorm = _normalizeSubject(e.subject);
+      if (subjNorm.isEmpty) continue;
+      bySubject.putIfAbsent(subjNorm, () => []).add(e);
+    }
+
+    String? bestSubj;
+    double bestScore = 0;
+
+    for (final entry in bySubject.entries) {
+      final subjNorm = entry.key;
+      final subjLevels = _extractLevels(subjNorm);
+      if (courseLevels.isNotEmpty &&
+          subjLevels.isNotEmpty &&
+          courseLevels.join(',') != subjLevels.join(',')) {
+        continue;
+      }
+
+      double score = 0;
+      if (subjNorm == courseNorm) {
+        score = 1.0;
+      } else {
+        final subjTokens = _tokenizeSubject(subjNorm);
+        if (courseTokens.isNotEmpty && subjTokens.isNotEmpty) {
+          final overlap =
+              courseTokens.where((t) => subjTokens.contains(t)).length;
+          final maxLen = courseTokens.length > subjTokens.length
+              ? courseTokens.length
+              : subjTokens.length;
+          score = overlap / maxLen;
+          if (score < 0.55 &&
+              (courseNorm.contains(subjNorm) ||
+                  subjNorm.contains(courseNorm))) {
+            final minTokens = courseTokens.length < subjTokens.length
+                ? courseTokens.length
+                : subjTokens.length;
+            if (minTokens >= 2 && overlap == minTokens) {
+              score = 0.72;
+            }
+          }
+        }
+      }
+
+      if (score >= 0.55 && score > bestScore) {
+        bestScore = score;
+        bestSubj = subjNorm;
+      }
+    }
+
+    if (bestSubj == null) return null;
+    final matched = bySubject[bestSubj]!;
+
+    final teacherCounts = <String, int>{};
+    final roomSet = <String>{};
+    final slotSet = <(int, String, String)>{};
+
+    for (final e in matched) {
+      for (final t in e.teachers) {
+        final clean = t.trim();
+        if (clean.isNotEmpty) {
+          teacherCounts[clean] = (teacherCounts[clean] ?? 0) + 1;
+        }
+      }
+      for (final r in e.classrooms) {
+        final clean = cleanClassroomName(r);
+        if (clean.isNotEmpty) roomSet.add(clean);
+      }
+      for (final d in e.days) {
+        final ord = dayOrder[d] ?? 9;
+        slotSet.add((ord, d, e.periodStart));
+      }
+    }
+
+    final sortedTeachers = teacherCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final teacher = sortedTeachers.isEmpty
+        ? ''
+        : (trimmedGroup.isNotEmpty
+            ? sortedTeachers.map((e) => e.key).join(', ')
+            : sortedTeachers.first.key);
+
+    final sortedSlots = slotSet.toList()
+      ..sort((a, b) {
+        final dCmp = a.$1.compareTo(b.$1);
+        return dCmp != 0 ? dCmp : a.$3.compareTo(b.$3);
+      });
+    final daySummaries = sortedSlots
+        .map((s) => s.$3.isEmpty ? s.$2 : '${s.$2} ${s.$3}')
+        .toList();
+
+    return CourseScheduleInfo(
+      teacher: teacher,
+      classrooms: roomSet.toList(),
+      daySummaries: daySummaries,
+    );
+  }
+
+  /// Strips trailing capacity tags like `(90)` or `(40)` from room labels.
+  static String cleanClassroomName(String raw) {
+    return raw.replaceAll(RegExp(r'\s*\(\d+\)\s*$'), '').trim();
+  }
+
+  static String _normalizeSubject(String raw) {
+    var s = raw
+        .replaceAll(RegExp(r'\[[^\]]*\]'), ' ')
+        .replaceAll(RegExp(r'\(\s*\d{2,4}\s*\)'), ' ')
+        .replaceAll('&', ' ')
+        .toLowerCase();
+    s = s.replaceAll(RegExp(r'[^a-z0-9\s]'), ' ');
+    return s.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  static Set<String> _tokenizeSubject(String norm) {
+    final out = <String>{};
+    for (final rawTok in norm.split(' ')) {
+      if (rawTok.isEmpty || _matchStopWords.contains(rawTok)) continue;
+      var tok = rawTok;
+      if (tok.length > 3 &&
+          tok.endsWith('s') &&
+          !tok.endsWith('ss') &&
+          !tok.endsWith('is')) {
+        tok = tok.substring(0, tok.length - 1);
+      }
+      if (tok.isNotEmpty && !_matchStopWords.contains(tok)) {
+        out.add(tok);
+      }
+    }
+    return out;
+  }
+
+  static List<String> _extractLevels(String norm) {
+    final levels = <String>[];
+    for (final tok in norm.split(' ')) {
+      if (RegExp(r'^[1-9]$').hasMatch(tok)) {
+        levels.add(tok);
+      } else if (tok == 'i') {
+        levels.add('1');
+      } else if (tok == 'ii') {
+        levels.add('2');
+      } else if (tok == 'iii') {
+        levels.add('3');
+      } else if (tok == 'iv') {
+        levels.add('4');
+      }
+    }
+    return levels;
+  }
 }

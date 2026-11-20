@@ -23,7 +23,7 @@ class AppDatabase {
     final fullPath = p.join(dbPath, 'inha_app.db');
     return openDatabase(
       fullPath,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE credentials (
@@ -50,6 +50,7 @@ class AppDatabase {
             category INTEGER NOT NULL DEFAULT 0,
             is_current INTEGER NOT NULL DEFAULT 1,
             overview_grade TEXT,
+            professor TEXT NOT NULL DEFAULT '',
             updated_at INTEGER NOT NULL
           )
         ''');
@@ -77,7 +78,12 @@ class AppDatabase {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             course_id TEXT NOT NULL,
             name TEXT NOT NULL,
-            value TEXT NOT NULL
+            value TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT '',
+            weight TEXT NOT NULL DEFAULT '',
+            range_str TEXT NOT NULL DEFAULT '',
+            percentage TEXT NOT NULL DEFAULT '',
+            item_type TEXT NOT NULL DEFAULT 'item'
           )
         ''');
 
@@ -147,6 +153,25 @@ class AppDatabase {
             value TEXT NOT NULL
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          const alters = [
+            "ALTER TABLE courses ADD COLUMN professor TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE grades ADD COLUMN category TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE grades ADD COLUMN weight TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE grades ADD COLUMN range_str TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE grades ADD COLUMN percentage TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE grades ADD COLUMN item_type TEXT NOT NULL DEFAULT 'item'",
+          ];
+          for (final sql in alters) {
+            try {
+              await db.execute(sql);
+            } catch (_) {
+              // Column already exists on partial/retried upgrades.
+            }
+          }
+        }
       },
     );
   }

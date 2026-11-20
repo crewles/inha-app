@@ -3,11 +3,13 @@ import 'dart:io';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/models.dart';
+import 'http_redirects.dart';
 
 class EclassException implements Exception {
   final String message;
@@ -89,31 +91,7 @@ class EclassService {
     final token = await fetchApiToken(refresh: true);
 
     // 2. Also establish web session (needed for Attendance & detailed HTML grades)
-    bool webOk = false;
-    try {
-      final resp = await _dio.get<String>('$baseUrl/login/index.php');
-      final doc = html_parser.parse(resp.data ?? '');
-      final tokenInput = doc.querySelector('input[name="logintoken"]');
-      final loginToken = tokenInput?.attributes['value'] ?? '';
-
-      final resp2 = await _dio.post<String>(
-        '$baseUrl/login/index.php',
-        data: {
-          'username': username,
-          'password': password,
-          'logintoken': loginToken,
-        },
-        options: Options(contentType: Headers.formUrlEncodedContentType),
-      );
-
-      final finalUrl = resp2.realUri.toString();
-      final body = resp2.data ?? '';
-      if (!(finalUrl.contains('login/index.php') &&
-          body.contains('loginerrormessage'))) {
-        webOk = true;
-        _loggedIn = true;
-      }
-    } catch (_) {}
+    final webOk = await _loginWeb(username, password);
 
     return (token != null && token.isNotEmpty) || webOk;
   }
@@ -121,31 +99,101 @@ class EclassService {
   Future<bool> ensureWebLoggedIn() async {
     if (_loggedIn) return true;
     if (_username == null || _password == null) return false;
+    return _loginWeb(_username!, _password!);
+  }
+
+  Future<bool> _loginWeb(String username, String password) async {
     try {
-      final resp = await _dio.get<String>('$baseUrl/login/index.php');
-      final doc = html_parser.parse(resp.data ?? '');
-      final tokenInput = doc.querySelector('input[name="logintoken"]');
-      final loginToken = tokenInput?.attributes['value'] ?? '';
-      final resp2 = await _dio.post<String>(
+      final getRes = await requestWithRedirects<String>(
+        _dio,
         '$baseUrl/login/index.php',
-        data: {
-          'username': _username!,
-          'password': _password!,
-          'logintoken': loginToken,
-        },
-        options: Options(contentType: Headers.formUrlEncodedContentType),
+        options: Options(responseType: ResponseType.plain),
       );
-      final finalUrl = resp2.realUri.toString();
-      final body = resp2.data ?? '';
-      if (finalUrl.contains('login/index.php') &&
-          body.contains('loginerrormessage')) {
+      final body1 = getRes.data ?? '';
+      if (!_isLoginPage(getRes.finalUri, body1)) {
+        _loggedIn = true;
+        return true;
+      }
+
+      final doc = html_parser.parse(body1);
+      final form = doc.querySelector('form.form-login') ??
+          doc.querySelector('form[action*="login"]') ??
+          doc.querySelector('form');
+      final actionRaw = form?.attributes['action'];
+      final actionUri = (actionRaw != null && actionRaw.isNotEmpty)
+          ? getRes.finalUri.resolve(actionRaw)
+          : Uri.parse('$baseUrl/login/index.php');
+
+      final payload = <String, String>{};
+      if (form != null) {
+        for (final input in form.querySelectorAll('input[name]')) {
+          final name = input.attributes['name'] ?? '';
+          if (name.isEmpty) continue;
+          final type = (input.attributes['type'] ?? 'text').toLowerCase();
+          if (type == 'hidden' ||
+              (type == 'submit' && name == 'loginbutton')) {
+            payload[name] = input.attributes['value'] ?? '';
+          }
+        }
+      }
+      payload['username'] = username;
+      payload['password'] = password;
+      payload.putIfAbsent('loginbutton', () => 'Log in');
+
+      final postRes = await requestWithRedirects<String>(
+        _dio,
+        actionUri.toString(),
+        method: 'POST',
+        data: payload,
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          responseType: ResponseType.plain,
+        ),
+      );
+
+      final body2 = postRes.data ?? '';
+      if (_isLoginPage(postRes.finalUri, body2)) {
+        _loggedIn = false;
         return false;
       }
       _loggedIn = true;
       return true;
     } catch (_) {
+      _loggedIn = false;
       return false;
     }
+  }
+
+  bool _isLoginPage(Uri uri, String body) {
+    final path = uri.path.toLowerCase();
+    if (path.contains('/login')) return true;
+    if (body.contains('loginerrormessage')) return true;
+    final doc = html_parser.parse(body);
+    return doc.querySelector('input[name="password"]') != null &&
+        doc.querySelector('input[name="username"]') != null;
+  }
+
+  Future<RedirectResponse<String>> _getAuthedHtml(String url) async {
+    await ensureWebLoggedIn();
+    var res = await requestWithRedirects<String>(
+      _dio,
+      url,
+      options: Options(responseType: ResponseType.plain),
+    );
+    if (_isLoginPage(res.finalUri, res.data ?? '') &&
+        _username != null &&
+        _password != null) {
+      _loggedIn = false;
+      await _cookieJar.deleteAll();
+      if (await _loginWeb(_username!, _password!)) {
+        res = await requestWithRedirects<String>(
+          _dio,
+          url,
+          options: Options(responseType: ResponseType.plain),
+        );
+      }
+    }
+    return res;
   }
 
   // ── Moodle Mobile WebService API ────────────────────────────
@@ -234,14 +282,35 @@ class EclassService {
 
   // ── Courses (JSON API + current semester detection) ─────────
 
+  String _extractProfessor(dom.Element link) {
+    dom.Element? node = link.parent;
+    for (var depth = 0; depth < 4 && node != null; depth++) {
+      final profEl = node.querySelector('.prof');
+      if (profEl != null) {
+        var raw = profEl.text
+            .replaceAll('\u00A0', ' ')
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
+        raw = raw.replaceFirst(
+          RegExp(r'^(Professor|Prof\.|Lecturer|교수)\s*:\s*', caseSensitive: false),
+          '',
+        );
+        return raw.trim();
+      }
+      node = node.parent;
+    }
+    return '';
+  }
+
   Future<List<Course>> getCourses() async {
     final now = DateTime.now().millisecondsSinceEpoch;
 
     // Fetch active homepage course IDs (represents current semester in Ubion)
     final activeIds = <String>{};
+    final profMap = <String, String>{};
     try {
-      if (await ensureWebLoggedIn()) {
-        final resp = await _dio.get<String>(baseUrl);
+      final resp = await _getAuthedHtml(baseUrl);
+      if (!_isLoginPage(resp.finalUri, resp.data ?? '')) {
         final doc = html_parser.parse(resp.data ?? '');
         var links = doc.querySelectorAll('a.course_link');
         if (links.isEmpty) {
@@ -251,7 +320,10 @@ class EclassService {
           final href = a.attributes['href'] ?? '';
           if (!href.contains('id=')) continue;
           final cid = href.split('id=').last.split('&').first.trim();
-          if (cid.isNotEmpty) activeIds.add(cid);
+          if (cid.isEmpty) continue;
+          activeIds.add(cid);
+          final prof = _extractProfessor(a);
+          if (prof.isNotEmpty) profMap[cid] = prof;
         }
       }
     } catch (_) {}
@@ -306,6 +378,7 @@ class EclassService {
                 category: cat,
                 isCurrent: isCur,
                 overviewGrade: overviewMap[cid],
+                professor: profMap[cid] ?? '',
                 updatedAt: now,
               ));
             }
@@ -316,8 +389,7 @@ class EclassService {
     } catch (_) {}
 
     // Fallback: HTML homepage scraping
-    await ensureWebLoggedIn();
-    final resp = await _dio.get<String>(baseUrl);
+    final resp = await _getAuthedHtml(baseUrl);
     final doc = html_parser.parse(resp.data ?? '');
     var links = doc.querySelectorAll('a.course_link');
     if (links.isEmpty) {
@@ -335,7 +407,12 @@ class EclassService {
       final name = rawName.replaceAll(RegExp(r'\[.*?\]'), '').trim();
       if (name.isEmpty) continue;
       seen.add(courseId);
-      courses.add(Course(id: courseId, name: name, updatedAt: now));
+      courses.add(Course(
+        id: courseId,
+        name: name,
+        professor: profMap[courseId] ?? _extractProfessor(a),
+        updatedAt: now,
+      ));
     }
     return courses;
   }
@@ -473,8 +550,7 @@ class EclassService {
     String courseId,
     String courseName,
   ) async {
-    await ensureWebLoggedIn();
-    final resp = await _dio.get<String>(
+    final resp = await _getAuthedHtml(
       '$baseUrl/mod/assign/index.php?id=$courseId',
     );
     final doc = html_parser.parse(resp.data ?? '');
@@ -520,34 +596,207 @@ class EclassService {
     return s.replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
   }
 
-  // ── Grades (HTML report + API overview) ─────────────────────
+  // ── Grades (HTML report + API fallback) ─────────────────────
+
+  String _cleanCellText(dom.Element? el) {
+    if (el == null) return '';
+    final buf = StringBuffer();
+    void walk(dom.Node node) {
+      if (node is dom.Text) {
+        buf.write(node.text);
+        return;
+      }
+      if (node is dom.Element) {
+        final cls = node.classes;
+        if (cls.contains('accesshide') || cls.contains('sr-only')) return;
+        for (final child in node.nodes) {
+          walk(child);
+        }
+      }
+    }
+
+    walk(el);
+    return buf
+        .toString()
+        .replaceAll('\u00A0', ' ')
+        .replaceAll('Учитывать пустые оценки.', '')
+        .replaceAll('Aggregate only non-empty grades.', '')
+        .replaceAll('Include empty grades.', '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
 
   Future<List<GradeItem>> getGrades(String courseId,
       {String? overviewGrade}) async {
     final grades = <GradeItem>[];
     try {
-      await ensureWebLoggedIn();
-      final resp = await _dio.get<String>(
+      final resp = await _getAuthedHtml(
         '$baseUrl/grade/report/user/index.php?id=$courseId',
       );
-      final doc = html_parser.parse(resp.data ?? '');
-      final table = doc.querySelector('table.user-grade');
-      if (table != null) {
-        for (final row in table.querySelectorAll('tr')) {
-          final item = row.querySelector('.column-itemname');
-          final grade = row.querySelector('td.column-grade');
-          if (item != null && grade != null) {
-            final name = item.text
-                .replaceAll('Учитывать пустые оценки.', '')
+      if (!_isLoginPage(resp.finalUri, resp.data ?? '')) {
+        final doc = html_parser.parse(resp.data ?? '');
+        final table = doc.querySelector('table.user-grade');
+        if (table != null) {
+          var currentCategory = '';
+          final tbody = table.querySelector('tbody') ?? table;
+          for (final row in tbody.querySelectorAll('tr')) {
+            if (row.parent?.localName == 'thead') continue;
+            final itemCell = row.querySelector('.column-itemname');
+            if (itemCell == null) continue;
+
+            final name = _cleanCellText(itemCell)
+                .replaceFirst(RegExp(r'^[∑\u2211]\s*'), '')
                 .trim();
-            final val = grade.text.trim();
-            if (val.isNotEmpty && val != '-' && val != 'Grade') {
-              grades.add(GradeItem(courseId: courseId, name: name, value: val));
+            if (name.isEmpty || name == 'Grade item') continue;
+
+            final gradeCell = row.querySelector('td.column-grade');
+            final weightCell = row.querySelector('td.column-weight');
+            final rangeCell = row.querySelector('td.column-range');
+            final pctCell = row.querySelector('td.column-percentage');
+
+            final val = _cleanCellText(gradeCell);
+            final weight = _cleanCellText(weightCell);
+            final range = _cleanCellText(rangeCell);
+            final pct = _cleanCellText(pctCell);
+
+            if (val == 'Grade' ||
+                weight == 'Calculated weight' ||
+                range == 'Range') {
+              continue;
             }
+
+            final itemClasses = itemCell.classes;
+            final rowClasses = row.classes;
+            final isLevel1 = itemClasses.contains('level1') ||
+                rowClasses.contains('level1');
+            final isTotal = itemClasses.contains('baggt') ||
+                rowClasses.contains('baggt') ||
+                (isLevel1 &&
+                    (itemClasses.contains('baggb') ||
+                        rowClasses.contains('baggb'))) ||
+                name.toLowerCase() == 'course total' ||
+                name.toLowerCase() == 'итого за курс' ||
+                name.contains('강좌 총점');
+
+            final isSum = !isTotal &&
+                (itemClasses.contains('baggb') ||
+                    rowClasses.contains('baggb') ||
+                    RegExp(r'\bSUM$', caseSensitive: false).hasMatch(name) ||
+                    name.toLowerCase().contains('category total') ||
+                    name.contains('합계'));
+
+            final isCategoryFolder = !isTotal &&
+                !isSum &&
+                gradeCell == null &&
+                (itemClasses.contains('category') ||
+                    rowClasses.contains('category') ||
+                    (weightCell == null && rangeCell == null));
+
+            if (isCategoryFolder) {
+              currentCategory = isLevel1 ? '' : name;
+              continue;
+            }
+
+            if (isTotal) {
+              grades.add(GradeItem(
+                courseId: courseId,
+                name: name,
+                value: val.isEmpty ? '-' : val,
+                category: '',
+                weight: weight,
+                range: range,
+                percentage: pct,
+                itemType: 'total',
+              ));
+              currentCategory = '';
+              continue;
+            }
+
+            if (isSum) {
+              final derivedCat = currentCategory.isNotEmpty
+                  ? currentCategory
+                  : name
+                      .replaceAll(RegExp(r'\s*\bSUM$', caseSensitive: false), '')
+                      .replaceAll(RegExp(r'\s*Category total$', caseSensitive: false), '')
+                      .trim();
+              grades.add(GradeItem(
+                courseId: courseId,
+                name: name,
+                value: val.isEmpty ? '-' : val,
+                category: derivedCat,
+                weight: weight,
+                range: range,
+                percentage: pct,
+                itemType: 'sum',
+              ));
+              currentCategory = '';
+              continue;
+            }
+
+            grades.add(GradeItem(
+              courseId: courseId,
+              name: name,
+              value: val.isEmpty ? '-' : val,
+              category: currentCategory,
+              weight: weight,
+              range: range,
+              percentage: pct,
+              itemType: 'item',
+            ));
           }
         }
       }
     } catch (_) {}
+
+    // Fallback 1: Moodle Mobile API per-course grade items
+    if (grades.isEmpty) {
+      try {
+        final uid = await _getUserId();
+        if (uid != null) {
+          final res = await callWebService(
+            'gradereport_user_get_grade_items',
+            {'courseid': courseId, 'userid': uid},
+          );
+          if (res is Map && res['usergrades'] is List) {
+            final ugs = res['usergrades'] as List;
+            if (ugs.isNotEmpty && ugs.first is Map) {
+              final items = (ugs.first['gradeitems'] as List?) ?? [];
+              for (final raw in items) {
+                if (raw is! Map) continue;
+                final rawType = (raw['itemtype'] ?? '').toString();
+                final name = (raw['itemname'] ??
+                        (rawType == 'course' ? 'Course total' : 'Category'))
+                    .toString()
+                    .trim();
+                final val =
+                    (raw['gradeformatted'] ?? '-').toString().trim();
+                final weight =
+                    (raw['weightformatted'] ?? '').toString().trim();
+                final pct =
+                    (raw['percentageformatted'] ?? '').toString().trim();
+                final minG = raw['grademin']?.toString() ?? '0';
+                final maxG = raw['grademax']?.toString() ?? '0';
+                final range = '$minG-$maxG';
+                final itemType = rawType == 'course'
+                    ? 'total'
+                    : (rawType == 'category' ? 'sum' : 'item');
+                if (name.isNotEmpty) {
+                  grades.add(GradeItem(
+                    courseId: courseId,
+                    name: name,
+                    value: val.isEmpty ? '-' : val,
+                    weight: weight,
+                    range: range,
+                    percentage: pct,
+                    itemType: itemType,
+                  ));
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
 
     if (grades.isEmpty &&
         overviewGrade != null &&
@@ -557,6 +806,7 @@ class EclassService {
         courseId: courseId,
         name: 'Course Total',
         value: overviewGrade,
+        itemType: 'total',
       ));
     }
     return grades;
@@ -565,40 +815,69 @@ class EclassService {
   // ── Attendance (Ubion HTML) ─────────────────────────────────
 
   Future<AttendanceData?> getAttendance(String courseId) async {
-    await ensureWebLoggedIn();
-    final resp = await _dio.get<String>(
+    final resp = await _getAuthedHtml(
       '$baseUrl/local/ubattendance/my_status.php?id=$courseId',
     );
+    if (_isLoginPage(resp.finalUri, resp.data ?? '')) return null;
     final doc = html_parser.parse(resp.data ?? '');
-    final table = doc.querySelector('table.attendance_my');
+    final table = doc.querySelector('table.attendance_my') ??
+        doc.querySelector('.attendance_my table') ??
+        doc.querySelector('table.generaltable');
     if (table == null) return null;
 
     final records = <AttendanceRecord>[];
     final tbody = table.querySelector('tbody');
-    if (tbody != null) {
-      for (final row in tbody.querySelectorAll('tr')) {
-        final cells = row.querySelectorAll('td');
-        if (cells.length >= 6) {
-          records.add(AttendanceRecord(
-            date: cells[0].text.trim(),
-            className: cells[1].text.trim(),
-            attendance: cells[2].text.trim(),
-            absence: cells[3].text.trim(),
-            late: cells[4].text.trim(),
-            others: cells[5].text.trim(),
-          ));
+    final rows = tbody != null
+        ? tbody.querySelectorAll('tr')
+        : table
+            .querySelectorAll('tr')
+            .where((tr) =>
+                tr.parent?.localName != 'thead' &&
+                tr.parent?.localName != 'tfoot')
+            .toList();
+
+    for (final row in rows) {
+      final cells = row.querySelectorAll('td');
+      if (cells.length >= 6) {
+        final date = _cleanCellText(cells[0]);
+        final clsName = _cleanCellText(cells[1]);
+        if (date.isEmpty && clsName.isEmpty) continue;
+        if (date.toLowerCase().startsWith('total') || date.startsWith('합계')) {
+          continue;
         }
+        records.add(AttendanceRecord(
+          date: date,
+          className: clsName,
+          attendance: _cleanCellText(cells[2]),
+          absence: _cleanCellText(cells[3]),
+          late: _cleanCellText(cells[4]),
+          others: _cleanCellText(cells[5]),
+        ));
       }
     }
 
     int att = 0, abs = 0, late = 0, oth = 0;
     final tfoot = table.querySelector('tfoot');
     if (tfoot != null) {
-      final text = tfoot.text;
-      att = _extractInt(text, 'Attendance');
-      abs = _extractInt(text, 'Absence');
-      late = _extractInt(text, 'Late');
-      oth = _extractInt(text, 'Others');
+      final text = tfoot.text.replaceAll('\u00A0', ' ');
+      att = _extractInt(text, ['Attendance', '출석', 'Присут']);
+      abs = _extractInt(text, ['Absence', 'Absent', '결석', 'Отсут']);
+      late = _extractInt(text, ['Late', '지각', 'Опозд']);
+      oth = _extractInt(text, ['Others', 'Other', '기타', 'Проч']);
+    }
+
+    if (att + abs + late + oth == 0 && records.isNotEmpty) {
+      for (final r in records) {
+        if (AttendanceRecord.isCellMarked(r.attendance)) {
+          att++;
+        } else if (AttendanceRecord.isCellMarked(r.absence)) {
+          abs++;
+        } else if (AttendanceRecord.isCellMarked(r.late)) {
+          late++;
+        } else if (AttendanceRecord.isCellMarked(r.others)) {
+          oth++;
+        }
+      }
     }
 
     return AttendanceData(
@@ -612,9 +891,15 @@ class EclassService {
     );
   }
 
-  int _extractInt(String text, String key) {
-    final m = RegExp('$key\\s*:\\s*(\\d+)').firstMatch(text);
-    return m != null ? int.tryParse(m.group(1)!) ?? 0 : 0;
+  int _extractInt(String text, List<String> keys) {
+    for (final key in keys) {
+      final m = RegExp('$key\\s*:\\s*(\\d+)', caseSensitive: false)
+          .firstMatch(text);
+      if (m != null) {
+        return int.tryParse(m.group(1)!) ?? 0;
+      }
+    }
+    return 0;
   }
 
   // ── Course Files (Moodle core_course_get_contents + ubfile) ─
@@ -675,9 +960,7 @@ class EclassService {
         }
       } catch (_) {}
     } catch (_) {
-      await ensureWebLoggedIn();
-      final resp =
-          await _dio.get<String>('$baseUrl/course/view.php?id=$courseId');
+      final resp = await _getAuthedHtml('$baseUrl/course/view.php?id=$courseId');
       final doc = html_parser.parse(resp.data ?? '');
       for (final a in doc.querySelectorAll('a[href]')) {
         final href = a.attributes['href'] ?? '';
@@ -701,16 +984,6 @@ class EclassService {
     String filename, {
     void Function(int received, int total)? onProgress,
   }) async {
-    String downloadUrl = url;
-    if (url.contains('/webservice/pluginfile.php')) {
-      final token = await fetchApiToken();
-      if (token != null && token.isNotEmpty && !url.contains('token=')) {
-        downloadUrl = '$url${url.contains('?') ? '&' : '?'}token=$token';
-      }
-    } else {
-      await ensureWebLoggedIn();
-    }
-
     final dir = await getApplicationDocumentsDirectory();
     final filesDir = Directory(p.join(dir.path, 'downloads'));
     if (!await filesDir.exists()) {
@@ -720,15 +993,59 @@ class EclassService {
     final safeName = filename.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
     final savePath = p.join(filesDir.path, safeName);
 
-    await _dio.download(
-      downloadUrl,
-      savePath,
+    if (url.contains('/webservice/pluginfile.php')) {
+      String downloadUrl = url;
+      final token = await fetchApiToken();
+      if (token != null && token.isNotEmpty && !url.contains('token=')) {
+        downloadUrl = '$url${url.contains('?') ? '&' : '?'}token=$token';
+      }
+      await _dio.download(
+        downloadUrl,
+        savePath,
+        onReceiveProgress: onProgress,
+        options: Options(
+          receiveTimeout: const Duration(minutes: 3),
+          followRedirects: true,
+        ),
+      );
+      return savePath;
+    }
+
+    await ensureWebLoggedIn();
+    var res = await requestWithRedirects<List<int>>(
+      _dio,
+      url,
       onReceiveProgress: onProgress,
       options: Options(
+        responseType: ResponseType.bytes,
         receiveTimeout: const Duration(minutes: 3),
-        followRedirects: true,
       ),
     );
+    if (res.finalUri.path.toLowerCase().contains('/login') &&
+        _username != null &&
+        _password != null) {
+      _loggedIn = false;
+      await _cookieJar.deleteAll();
+      if (await _loginWeb(_username!, _password!)) {
+        res = await requestWithRedirects<List<int>>(
+          _dio,
+          url,
+          onReceiveProgress: onProgress,
+          options: Options(
+            responseType: ResponseType.bytes,
+            receiveTimeout: const Duration(minutes: 3),
+          ),
+        );
+      }
+    }
+    if (res.finalUri.path.toLowerCase().contains('/login')) {
+      throw EclassException('Session expired while downloading $filename');
+    }
+    final bytes = res.data;
+    if (bytes == null || bytes.isEmpty) {
+      throw EclassException('Empty download response for $filename');
+    }
+    await File(savePath).writeAsBytes(bytes, flush: true);
     return savePath;
   }
 

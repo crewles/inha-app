@@ -38,6 +38,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           obscureText: true,
           decoration: InputDecoration(
             labelText: app.s.insPasswordOptional,
+            helperText: app.s.insPasswordHintOverride,
+            helperMaxLines: 2,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
             ),
@@ -140,7 +142,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final studentName = (app.insData?.studentInfo['name'] ?? '').trim();
     final gradeYear = (app.insData?.studentInfo['grade_year'] ?? '').trim();
     final displayName = studentName.isNotEmpty ? studentName : studentId;
-    final hasIns = (app.credentials?.insPassword ?? '').isNotEmpty;
+    final hasCustomIns =
+        (app.credentials?.insPassword ?? '').trim().isNotEmpty;
     final offsetLabel =
         '${settings.reminderOffsetMinutes} ${s.isRu ? "мин" : "min"}';
 
@@ -253,14 +256,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         const SizedBox(width: 8),
                         ExpressivePill(
-                          icon: hasIns ? Icons.check_circle_rounded : null,
-                          label: hasIns ? s.connectedBadge : s.notSetBadge,
-                          backgroundColor: hasIns
-                              ? cs.secondaryFixed
-                              : cs.surfaceContainerHigh,
-                          foregroundColor: hasIns
-                              ? cs.onSecondaryFixed
-                              : cs.onSurfaceVariant,
+                          icon: hasCustomIns
+                              ? Icons.check_circle_rounded
+                              : Icons.sync_rounded,
+                          label: hasCustomIns
+                              ? s.insOverrideBadge
+                              : s.insAutoPasswordBadge,
+                          backgroundColor: hasCustomIns
+                              ? cs.primaryFixed
+                              : cs.secondaryFixed,
+                          foregroundColor: hasCustomIns
+                              ? cs.onPrimaryFixed
+                              : cs.onSecondaryFixed,
                           fontWeight: FontWeight.w700,
                         ),
                         const SizedBox(width: 6),

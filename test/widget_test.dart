@@ -81,7 +81,74 @@ class FakeAppState extends AppState {
     ];
 
     gradesByCourse['101'] = const [
-      GradeItem(courseId: '101', name: 'Midterm Exam', value: '48.5 / 50'),
+      GradeItem(
+        courseId: '101',
+        name: 'P1',
+        value: '6.00',
+        category: 'Midterm exam',
+        weight: '25.00 %',
+        range: '0-10',
+        percentage: '60.00 %',
+        itemType: 'item',
+      ),
+      GradeItem(
+        courseId: '101',
+        name: 'P2',
+        value: '6.00',
+        category: 'Midterm exam',
+        weight: '15.00 %',
+        range: '0-6',
+        percentage: '100.00 %',
+        itemType: 'item',
+      ),
+      GradeItem(
+        courseId: '101',
+        name: 'Midterm exam SUM',
+        value: '27.00',
+        category: 'Midterm exam',
+        weight: '40.00 %',
+        range: '0-40',
+        percentage: '67.50 %',
+        itemType: 'sum',
+      ),
+      GradeItem(
+        courseId: '101',
+        name: 'Discussion',
+        value: '10.00',
+        category: 'Term Project',
+        weight: '100.00 %',
+        range: '0-10',
+        percentage: '100.00 %',
+        itemType: 'item',
+      ),
+      GradeItem(
+        courseId: '101',
+        name: 'Term Project SUM',
+        value: '10.00',
+        category: 'Term Project',
+        weight: '10.00 %',
+        range: '0-10',
+        percentage: '100.00 %',
+        itemType: 'sum',
+      ),
+      GradeItem(
+        courseId: '101',
+        name: 'Final exam SUM',
+        value: '-',
+        category: 'Final exam',
+        weight: '50.00 %',
+        range: '0-0',
+        percentage: '-',
+        itemType: 'sum',
+      ),
+      GradeItem(
+        courseId: '101',
+        name: 'Course total',
+        value: '18.50',
+        range: '0-50',
+        percentage: '37.00 %',
+        itemType: 'total',
+      ),
     ];
     attendanceByCourse['101'] = const AttendanceData(
       courseId: '101',
@@ -115,6 +182,12 @@ class FakeAppState extends AppState {
         url: 'https://example.com/lec10.pdf',
         size: 5200000,
         localPath: '/tmp/Lecture_10_B-Trees.pdf',
+      ),
+      CourseFile(
+        courseId: '101',
+        name: 'Lab9_Starter_Code.zip',
+        url: 'https://example.com/lab9.zip',
+        size: 840000,
       ),
     ];
 
@@ -162,10 +235,10 @@ class FakeAppState extends AppState {
         days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
         periodStart: '09:00',
         periodEnd: '10:30',
-        subject: 'Data Structures',
+        subject: 'Data Structure',
         teachers: ['Prof. Kim Dong-Hyun'],
         classes: ['SOCIE 22-01'],
-        classrooms: ['B201'],
+        classrooms: ['B201 (90)'],
       ),
       ScheduleEntry(
         cardId: 'c2',
@@ -176,7 +249,7 @@ class FakeAppState extends AppState {
         subject: 'Operating Systems',
         teachers: ['Prof. Bekzod Alimov'],
         classes: ['SOCIE 22-01'],
-        classrooms: ['A304'],
+        classrooms: ['A304 (45)'],
       ),
     ];
   }
@@ -273,14 +346,114 @@ void main() {
     expect(TimetableService.filterByDay(byClass, 'Tue').length, 0);
   });
 
-  testWidgets('LoginScreen renders and switches language', (tester) async {
+  test('UserCredentials.effectiveInsPassword falls back to eclassPassword', () {
+    const cAuto = UserCredentials(
+      studentId: 'U2210001',
+      eclassPassword: 'eclass_pw',
+    );
+    const cCustom = UserCredentials(
+      studentId: 'U2210001',
+      eclassPassword: 'eclass_pw',
+      insPassword: 'ins_override',
+    );
+    expect(cAuto.effectiveInsPassword, 'eclass_pw');
+    expect(cCustom.effectiveInsPassword, 'ins_override');
+  });
+
+  test('AttendanceRecord.statusType handles nbsp, dashes, and marks', () {
+    const rPresent = AttendanceRecord(
+      date: '2026-09-09',
+      className: '1Class',
+      attendance: '○',
+      absence: '\u00A0',
+      late: '-',
+      others: '',
+    );
+    const rAbsent = AttendanceRecord(
+      date: '2026-10-23',
+      className: '14Class',
+      attendance: '\u00A0',
+      absence: '○',
+      late: '',
+      others: '',
+    );
+    const rLate = AttendanceRecord(
+      date: '2026-10-25',
+      className: '15Class',
+      attendance: '-',
+      absence: '',
+      late: '○',
+      others: '',
+    );
+    const rOther = AttendanceRecord(
+      date: '2026-10-26',
+      className: '16Class',
+      attendance: '\u00A0',
+      absence: '-',
+      late: '',
+      others: '○',
+    );
+    expect(rPresent.statusType, 'present');
+    expect(rAbsent.statusType, 'absent');
+    expect(rLate.statusType, 'late');
+    expect(rOther.statusType, 'other');
+  });
+
+  test('TimetableService.matchCourse matches subjects and guards numeric levels',
+      () {
+    const entries = [
+      ScheduleEntry(
+        cardId: 'c1',
+        lessonId: 'l1',
+        days: ['Mon', 'Wed'],
+        periodStart: '10:00',
+        periodEnd: '11:30',
+        subject: 'Data Structure',
+        teachers: ['Prof. Sarvar'],
+        classes: ['SOCIE 22-01'],
+        classrooms: ['A202 (90)'],
+      ),
+      ScheduleEntry(
+        cardId: 'c2',
+        lessonId: 'l2',
+        days: ['Tue'],
+        periodStart: '13:00',
+        periodEnd: '14:30',
+        subject: 'Calculus 2',
+        teachers: ['Prof. Euler'],
+        classes: ['SOCIE 22-01'],
+        classrooms: ['B304 (320)'],
+      ),
+    ];
+
+    final matched = TimetableService.matchCourse(
+      'Data Structures & Algorithms',
+      entries,
+      group: 'SOCIE 22-01',
+    );
+    expect(matched, isNotNull);
+    expect(matched!.teacher, 'Prof. Sarvar');
+    expect(matched.classroomSummary, 'A202');
+
+    final wrongLevel = TimetableService.matchCourse(
+      'Calculus 1',
+      entries,
+      group: 'SOCIE 22-01',
+    );
+    expect(wrongLevel, isNull);
+  });
+
+  testWidgets('LoginScreen renders 2 fields, unified password note, and switches language',
+      (tester) async {
     final app = FakeAppState(loggedIn: false);
     await tester.pumpWidget(_wrap(app, const LoginScreen()));
     await tester.pumpAndSettle();
 
     expect(find.text('Inha App'), findsOneWidget);
     expect(find.text('Sign in'), findsOneWidget);
-    expect(find.textContaining('Forgot password'), findsNothing);
+    expect(find.text('Your eClass password is also used for the INS portal.'),
+        findsOneWidget);
+    expect(find.byType(TextFormField), findsNWidgets(2));
 
     await tester.ensureVisible(find.text('RU'));
     await tester.tap(find.text('RU'));
@@ -288,12 +461,16 @@ void main() {
     expect(find.text('Войти'), findsOneWidget);
   });
 
-  testWidgets('CoursesScreen renders summary and course cards', (tester) async {
+  testWidgets('CoursesScreen hides ID and shows matched professor and room',
+      (tester) async {
     final app = FakeAppState();
     await tester.pumpWidget(_wrap(app, const CoursesScreen()));
     await tester.pumpAndSettle();
 
     expect(find.text('Data Structures & Algorithms'), findsOneWidget);
+    expect(find.textContaining('ID:'), findsNothing);
+    expect(find.text('Prof. Kim Dong-Hyun'), findsOneWidget);
+    expect(find.textContaining('B201'), findsOneWidget);
     expect(find.text('3.85'), findsOneWidget);
     expect(find.text('Syllabus'), findsOneWidget);
   });
@@ -312,26 +489,62 @@ void main() {
     expect(find.text('Assignment 4: Red-Black Trees'), findsNothing);
   });
 
-  testWidgets('CourseDetailScreen switches pill tabs cleanly', (tester) async {
+  testWidgets('CourseDetailScreen renders Stitch Assignments, Grades, Attendance, and Files tabs',
+      (tester) async {
     final app = FakeAppState();
     await tester.pumpWidget(
       _wrap(app, CourseDetailScreen(course: app.courses.first)),
     );
     await tester.pumpAndSettle();
 
+    // Header has professor & schedule, no ID
+    expect(find.textContaining('ID:'), findsNothing);
+    expect(find.text('Prof. Kim Dong-Hyun'), findsOneWidget);
+    expect(find.text('50%'), findsOneWidget);
+    expect(find.text('Submit work'), findsOneWidget);
     expect(find.text('Assignment 4: Red-Black Trees'), findsOneWidget);
 
+    // Filter on Assignments tab
+    await tester.tap(find.byKey(const ValueKey('cd_assign_filter_graded')));
+    await tester.pumpAndSettle();
+    expect(find.text('Lab 3: Binary Search Trees'), findsOneWidget);
+    expect(find.text('Assignment 4: Red-Black Trees'), findsNothing);
+
+    // Tab 1: Stitch Grades (no Submit work FAB, multi-category breakdown)
     await tester.tap(find.text('Grades'));
     await tester.pumpAndSettle();
-    expect(find.text('Midterm Exam'), findsOneWidget);
+    expect(find.text('Submit work'), findsNothing);
+    expect(find.text('37.00 %'), findsOneWidget);
+    expect(find.text('Syllabus Weight Breakdown'), findsOneWidget);
+    expect(find.text('Midterm exam'), findsOneWidget);
+    expect(find.text('P1'), findsOneWidget);
+    final verticalScroll = find.byWidgetPredicate(
+      (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+    );
+    await tester.scrollUntilVisible(
+      find.text('Final exam'),
+      250,
+      scrollable: verticalScroll,
+    );
+    expect(find.text('Term Project'), findsOneWidget);
+    expect(find.text('Final exam'), findsOneWidget);
 
+    // Tab 2: Attendance
     await tester.tap(find.text('Attendance'));
     await tester.pumpAndSettle();
     expect(find.text('88%'), findsOneWidget);
 
+    // Tab 3: Stitch Files (search, filters, Download all FAB)
     await tester.tap(find.text('Files'));
     await tester.pumpAndSettle();
+    expect(find.text('Offline Materials'), findsOneWidget);
+    expect(find.text('Download all (1)'), findsOneWidget);
     expect(find.text('Lecture_10_B-Trees.pdf'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('cd_file_filter_labs')));
+    await tester.pumpAndSettle();
+    expect(find.text('Lab9_Starter_Code.zip'), findsOneWidget);
+    expect(find.text('Lecture_10_B-Trees.pdf'), findsNothing);
   });
 
   testWidgets('TimetableScreen renders hero banner and schedule in dark mode',
@@ -341,11 +554,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('SOCIE 22-01'), findsOneWidget);
-    expect(find.text('Data Structures'), findsAtLeastNWidgets(1));
+    expect(find.text('Data Structure'), findsAtLeastNWidgets(1));
     expect(find.text('Operating Systems'), findsAtLeastNWidgets(1));
   });
 
-  testWidgets('InsScreen renders hero card, semesters, and password prompt',
+  testWidgets('InsScreen renders hero card and retry/override prompt on error',
       (tester) async {
     final app = FakeAppState();
     await tester.pumpWidget(_wrap(app, const InsScreen()));
@@ -356,19 +569,25 @@ void main() {
     expect(find.text('Computer Algorithms'), findsOneWidget);
 
     final noInsApp = FakeAppState(withIns: false);
+    noInsApp.insError = 'Invalid student ID or INS password';
     await tester.pumpWidget(_wrap(noInsApp, const InsScreen()));
     await tester.pumpAndSettle();
-    expect(find.text('Save & Load'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Use custom INS password'), findsOneWidget);
   });
 
-  testWidgets('SettingsScreen & HomeShell render without errors',
+  testWidgets('SettingsScreen & HomeShell render Auto/Custom INS badges',
       (tester) async {
-    final app = FakeAppState();
-    await tester.pumpWidget(_wrap(app, const SettingsScreen()));
+    final customApp = FakeAppState(withIns: true);
+    await tester.pumpWidget(_wrap(customApp, const SettingsScreen()));
     await tester.pumpAndSettle();
+    expect(find.text('Custom'), findsOneWidget);
 
-    expect(find.text('Jasmina Kurbanova'), findsOneWidget);
-    expect(find.text('Connected'), findsOneWidget);
+    final autoApp = FakeAppState(withIns: false);
+    await tester.pumpWidget(_wrap(autoApp, const SettingsScreen()));
+    await tester.pumpAndSettle();
+    expect(find.text('Auto (eClass)'), findsOneWidget);
+
     await tester.scrollUntilVisible(
       find.text('Log out of Inha Portal'),
       300,
@@ -376,7 +595,7 @@ void main() {
     );
     expect(find.text('Log out of Inha Portal'), findsOneWidget);
 
-    await tester.pumpWidget(_wrap(app, const HomeShell()));
+    await tester.pumpWidget(_wrap(customApp, const HomeShell()));
     await tester.pumpAndSettle();
     expect(find.byType(NavigationBar), findsOneWidget);
   });

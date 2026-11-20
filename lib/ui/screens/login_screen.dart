@@ -15,9 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _studentIdCtrl = TextEditingController();
   final _eclassPwCtrl = TextEditingController();
-  final _insPwCtrl = TextEditingController();
   bool _obscureEclass = true;
-  bool _obscureIns = true;
   bool _loading = false;
   String? _error;
 
@@ -25,7 +23,6 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _studentIdCtrl.dispose();
     _eclassPwCtrl.dispose();
-    _insPwCtrl.dispose();
     super.dispose();
   }
 
@@ -38,9 +35,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final app = context.read<AppState>();
     final ok = await app.login(
-      studentId: _studentIdCtrl.text,
+      studentId: _studentIdCtrl.text.trim(),
       eclassPassword: _eclassPwCtrl.text,
-      insPassword: _insPwCtrl.text,
     );
 
     if (!mounted) return;
@@ -239,7 +235,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               TextFormField(
                                 controller: _eclassPwCtrl,
                                 obscureText: _obscureEclass,
-                                textInputAction: TextInputAction.next,
+                                textInputAction: TextInputAction.done,
+                                onFieldSubmitted: (_) => _submit(),
                                 decoration: _fieldDecoration(
                                   cs: cs,
                                   hint: s.enterEclassPasswordHint,
@@ -260,65 +257,28 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ? s.fieldRequired
                                     : null,
                               ),
-                              const SizedBox(height: 16),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      s.insPasswordOptional,
-                                      style: tt.labelMedium?.copyWith(
-                                        color: cs.onSurface,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.sync_rounded,
-                                          size: 13, color: cs.secondary),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        s.autoSyncTag,
-                                        style: tt.labelSmall?.copyWith(
-                                          color: cs.secondary,
-                                          fontWeight: FontWeight.w700,
+                              const SizedBox(height: 14),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: cs.surfaceContainerLow,
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.sync_rounded,
+                                        size: 16, color: cs.secondary),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        s.loginSamePasswordNote,
+                                        style: tt.bodySmall?.copyWith(
+                                          color: cs.onSurfaceVariant,
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                s.insSyncHelper,
-                                style: tt.bodySmall?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              TextFormField(
-                                controller: _insPwCtrl,
-                                obscureText: _obscureIns,
-                                textInputAction: TextInputAction.done,
-                                onFieldSubmitted: (_) => _submit(),
-                                decoration: _fieldDecoration(
-                                  cs: cs,
-                                  hint: s.enterInsPasswordHint,
-                                  prefixIcon: Icons.key_outlined,
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      _obscureIns
-                                          ? Icons.visibility_outlined
-                                          : Icons.visibility_off_outlined,
-                                      size: 20,
-                                      color: cs.onSurfaceVariant,
                                     ),
-                                    onPressed: () => setState(
-                                        () => _obscureIns = !_obscureIns),
-                                  ),
+                                  ],
                                 ),
                               ),
                               if (_error != null) ...[

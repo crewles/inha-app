@@ -13,6 +13,14 @@ class UserCredentials {
     this.eclassToken,
   });
 
+  /// Password used when authenticating to INS (`ins.inha.uz`): uses the
+  /// optional override if configured, otherwise falls back to [eclassPassword].
+  String get effectiveInsPassword {
+    final override = insPassword?.trim();
+    if (override != null && override.isNotEmpty) return override;
+    return eclassPassword;
+  }
+
   UserCredentials copyWith({
     String? studentId,
     String? eclassPassword,
@@ -36,6 +44,7 @@ class Course {
   final int category;
   final bool isCurrent;
   final String? overviewGrade;
+  final String professor;
   final int updatedAt;
 
   const Course({
@@ -44,6 +53,7 @@ class Course {
     this.category = 0,
     this.isCurrent = true,
     this.overviewGrade,
+    this.professor = '',
     this.updatedAt = 0,
   });
 
@@ -53,6 +63,7 @@ class Course {
         'category': category,
         'is_current': isCurrent ? 1 : 0,
         'overview_grade': overviewGrade,
+        'professor': professor,
         'updated_at': updatedAt,
       };
 
@@ -62,6 +73,7 @@ class Course {
         category: (m['category'] as int?) ?? 0,
         isCurrent: ((m['is_current'] as int?) ?? 1) == 1,
         overviewGrade: m['overview_grade'] as String?,
+        professor: (m['professor'] as String?) ?? '',
         updatedAt: (m['updated_at'] as int?) ?? 0,
       );
 }
@@ -196,23 +208,50 @@ class GradeItem {
   final String courseId;
   final String name;
   final String value;
+  final String category;
+  final String weight;
+  final String range;
+  final String percentage;
+
+  /// One of `'category'`, `'item'`, `'sum'`, or `'total'`.
+  final String itemType;
 
   const GradeItem({
     required this.courseId,
     required this.name,
     required this.value,
+    this.category = '',
+    this.weight = '',
+    this.range = '',
+    this.percentage = '',
+    this.itemType = 'item',
   });
+
+  bool get isTotal => itemType == 'total';
+  bool get isSum => itemType == 'sum';
+  bool get isCategory => itemType == 'category';
+  bool get isItem => itemType == 'item';
 
   Map<String, dynamic> toMap() => {
         'course_id': courseId,
         'name': name,
         'value': value,
+        'category': category,
+        'weight': weight,
+        'range_str': range,
+        'percentage': percentage,
+        'item_type': itemType,
       };
 
   factory GradeItem.fromMap(Map<String, dynamic> m) => GradeItem(
         courseId: m['course_id'] as String,
         name: m['name'] as String,
         value: m['value'] as String,
+        category: (m['category'] as String?) ?? '',
+        weight: (m['weight'] as String?) ?? '',
+        range: (m['range_str'] as String?) ?? '',
+        percentage: (m['percentage'] as String?) ?? '',
+        itemType: (m['item_type'] as String?) ?? 'item',
       );
 }
 
@@ -233,12 +272,16 @@ class AttendanceRecord {
     required this.others,
   });
 
+  static bool isCellMarked(String raw) {
+    final cleaned = raw.replaceAll('\u00A0', '').trim();
+    if (cleaned.isEmpty) return false;
+    return cleaned != '-' && cleaned != '—' && cleaned != '0';
+  }
+
   String get statusType {
-    if (attendance.trim() == '○' || attendance.trim().isNotEmpty) {
-      return 'present';
-    }
-    if (absence.trim().isNotEmpty) return 'absent';
-    if (late.trim().isNotEmpty) return 'late';
+    if (isCellMarked(attendance)) return 'present';
+    if (isCellMarked(absence)) return 'absent';
+    if (isCellMarked(late)) return 'late';
     return 'other';
   }
 
@@ -541,4 +584,20 @@ class AppSettings {
       lastSyncAt: lastSyncAt ?? this.lastSyncAt,
     );
   }
+}
+
+/// Matched timetable summary for a course (from EduPage entries).
+class CourseScheduleInfo {
+  final String teacher;
+  final List<String> classrooms;
+  final List<String> daySummaries;
+
+  const CourseScheduleInfo({
+    this.teacher = '',
+    this.classrooms = const [],
+    this.daySummaries = const [],
+  });
+
+  String get classroomSummary => classrooms.join(', ');
+  String get scheduleSummary => daySummaries.join(' · ');
 }

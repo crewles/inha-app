@@ -348,4 +348,61 @@ class S {
   String get localStorageFooter => isRu
       ? 'Локальное хранилище SQLite • Прямое подключение к eClass & INS'
       : 'Local SQLite Storage • Direct eClass & INS Client';
+
+  // Unified password & INS UX
+  String get loginSamePasswordNote => isRu
+      ? 'Этот пароль автоматически используется для eClass и портала INS.'
+      : 'Your eClass password is also used for the INS portal.';
+  String get insNoData => isRu
+      ? 'На портале INS пока нет записей об оценках.'
+      : 'INS returned no grade records yet.';
+  String get insOverridePasswordBtn =>
+      isRu ? 'Указать другой пароль INS' : 'Use custom INS password';
+  String get insAutoPasswordBadge =>
+      isRu ? 'Авто (eClass)' : 'Auto (eClass)';
+  String get insOverrideBadge => isRu ? 'Свой пароль' : 'Custom';
+  String get insPasswordHintOverride => isRu
+      ? 'Оставьте пустым, чтобы использовать пароль eClass'
+      : 'Leave empty to use your eClass password';
+  String get retryLabel => isRu ? 'Повторить' : 'Retry';
+
+  // Course Detail — Stitch Assignments / Grades / Files
+  String get assignmentsProgressTitle =>
+      isRu ? 'Прогресс по заданиям' : 'Assignment Completion';
+  String completedOfTotal(int done, int total) => isRu
+      ? '$done из $total выполнено'
+      : '$done of $total completed';
+  String get hideCompletedLabel =>
+      isRu ? 'Скрыть сданные' : 'Hide completed';
+
+  String get currentStandingLabel =>
+      isRu ? 'ТЕКУЩИЙ ИТОГ' : 'CURRENT STANDING';
+  String get courseTotalLabel => isRu ? 'Итог по курсу' : 'Course Total';
+  String get syllabusWeightsTitle =>
+      isRu ? 'Разбивка по весам' : 'Syllabus Weight Breakdown';
+  String get weightCol => isRu ? 'Вес' : 'Weight';
+  String get scoreCol => isRu ? 'Оценка' : 'Score';
+  String get rangeCol => isRu ? 'Диапазон' : 'Range';
+  String get percentCol => isRu ? 'Процент' : 'Percent';
+  String categoryItemsCount(int n) => isRu ? '$n поз.' : '$n items';
+  String get itemsPending =>
+      isRu ? 'Оценок по этой категории пока нет' : 'No items recorded yet';
+
+  String get offlineStorageTitle =>
+      isRu ? 'Офлайн-материалы' : 'Offline Materials';
+  String offlineFilesCount(int cached, int total) => isRu
+      ? 'Скачано $cached из $total файлов'
+      : '$cached of $total files saved offline';
+  String get searchMaterialsHint =>
+      isRu ? 'Поиск файлов курса...' : 'Search course files...';
+  String get filterLectures => isRu ? 'Слайды' : 'Slides';
+  String get filterLabs => isRu ? 'Практика' : 'Labs & Code';
+  String get filterDocuments => isRu ? 'Документы' : 'Documents';
+  String get filterOffline => isRu ? 'Офлайн' : 'Offline';
+  String downloadAllCount(int n) =>
+      isRu ? 'Скачать все ($n)' : 'Download all ($n)';
+  String downloadingAllProgress(int done, int total) =>
+      isRu ? 'Скачивание $done/$total...' : 'Downloading $done/$total...';
+  String get downloadedLocallyBadge =>
+      isRu ? 'На устройстве' : 'Saved offline';
 }

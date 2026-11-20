@@ -23,6 +23,7 @@ class AppState extends ChangeNotifier {
   bool isInsLoading = false;
   bool isTimetableLoading = false;
   String? lastError;
+  String? insError;
 
   UserCredentials? credentials;
   AppSettings settings = const AppSettings();
@@ -42,6 +43,14 @@ class AppState extends ChangeNotifier {
     if (settings.showAllCourses) return courses;
     final current = courses.where((c) => c.isCurrent).toList();
     return current.isNotEmpty ? current : courses;
+  }
+
+  CourseScheduleInfo? courseScheduleFor(Course course) {
+    return TimetableService.matchCourse(
+      course.name,
+      timetableEntries,
+      group: settings.timetableGroup,
+    );
   }
 
   ThemeMode get themeMode {
@@ -85,6 +94,9 @@ class AppState extends ChangeNotifier {
 
     if (isLoggedIn) {
       syncCourses(silent: true);
+      if (insData == null) {
+        syncIns(silent: true);
+      }
     }
     if (timetableEntries.isEmpty) {
       syncTimetable(silent: true);
@@ -121,23 +133,20 @@ class AppState extends ChangeNotifier {
     await syncCourses(silent: true);
     syncAllAssignments();
     syncTimetable(silent: true);
-    if (cleanIns != null) {
-      syncIns(silent: true);
-    }
+    syncIns(silent: true);
     return true;
   }
 
   Future<void> saveInsPassword(String password) async {
     if (credentials == null) return;
+    final clean = password.trim();
     credentials = credentials!.copyWith(
-      insPassword: password.trim().isEmpty ? null : password.trim(),
-      clearInsPassword: password.trim().isEmpty,
+      insPassword: clean.isEmpty ? null : clean,
+      clearInsPassword: clean.isEmpty,
     );
     await _db.saveCredentials(credentials!);
     notifyListeners();
-    if (credentials!.insPassword != null) {
-      await syncIns();
-    }
+    await syncIns();
   }
 
   Future<void> logout() async {
@@ -152,6 +161,8 @@ class AppState extends ChangeNotifier {
     attendanceByCourse.clear();
     filesByCourse.clear();
     insData = null;
+    lastError = null;
+    insError = null;
     notifyListeners();
   }
 
@@ -295,9 +306,7 @@ class AppState extends ChangeNotifier {
         await syncCourseDetails(c);
       }
       await syncTimetable(silent: true);
-      if (credentials?.insPassword != null) {
-        await syncIns(silent: true);
-      }
+      await syncIns(silent: true);
       await _updateLastSync();
     } finally {
       isSyncing = false;
@@ -317,25 +326,29 @@ class AppState extends ChangeNotifier {
 
   Future<bool> syncIns({bool silent = false}) async {
     final creds = credentials;
-    if (creds == null ||
-        creds.insPassword == null ||
-        creds.insPassword!.isEmpty) {
-      return false;
-    }
+    if (creds == null) return false;
+    final pw = creds.effectiveInsPassword;
+    if (pw.isEmpty) return false;
+
+    insError = null;
     if (!silent) {
       isInsLoading = true;
       notifyListeners();
     }
     try {
-      final data = await _ins.fetchGradesAndTranscript(
-          creds.studentId, creds.insPassword!);
+      final data = await _ins.fetchGradesAndTranscript(creds.studentId, pw);
       if (data != null) {
         insData = data;
         await _db.saveInsData(data);
         return true;
       }
+      insError = s.insNoData;
       return false;
-    } catch (_) {
+    } on InsException catch (e) {
+      insError = e.message;
+      return false;
+    } catch (e) {
+      insError = e.toString();
       return false;
     } finally {
       isInsLoading = false;

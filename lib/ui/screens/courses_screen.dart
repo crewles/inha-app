@@ -171,6 +171,7 @@ class CoursesScreen extends StatelessWidget {
                 _buildCourseCard(
                   context: context,
                   course: visible[i],
+                  schedule: app.courseScheduleFor(visible[i]),
                   pendingCount: app.allAssignments
                       .where(
                           (a) => a.courseId == visible[i].id && !a.isSubmitted)
@@ -294,12 +295,18 @@ class CoursesScreen extends StatelessWidget {
   Widget _buildCourseCard({
     required BuildContext context,
     required Course course,
+    required CourseScheduleInfo? schedule,
     required int pendingCount,
     required ColorScheme cs,
     required TextTheme tt,
     required dynamic s,
   }) {
     final (iconBg, iconFg, iconData) = _courseAccent(course, cs);
+    final professor = (schedule?.teacher.isNotEmpty == true)
+        ? schedule!.teacher
+        : course.professor.trim();
+    final classroom = schedule?.classroomSummary ?? '';
+    final slots = schedule?.scheduleSummary ?? '';
 
     Color statusBg;
     Color statusFg;
@@ -375,15 +382,67 @@ class CoursesScreen extends StatelessWidget {
                         ],
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      course.isCurrent
-                          ? 'ID: ${course.id}'
-                          : 'ID: ${course.id} • ${s.archiveTag}',
-                      style: tt.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant,
+                    if (professor.isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.person_outline_rounded,
+                            size: 14,
+                            color: cs.primary,
+                          ),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              professor,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: tt.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
+                    ],
+                    if (classroom.isNotEmpty || slots.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.meeting_room_outlined,
+                            size: 14,
+                            color: cs.secondary,
+                          ),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              [
+                                if (classroom.isNotEmpty) classroom,
+                                if (slots.isNotEmpty) slots,
+                              ].join(' • '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: tt.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (!course.isCurrent) ...[
+                      const SizedBox(height: 6),
+                      ExpressivePill(
+                        label: s.archiveTag,
+                        backgroundColor: cs.surfaceContainerHigh,
+                        foregroundColor: cs.onSurfaceVariant,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        fontSize: 11,
+                      ),
+                    ],
                   ],
                 ),
               ),

@@ -13,21 +13,59 @@ class InsScreen extends StatefulWidget {
 }
 
 class _InsScreenState extends State<InsScreen> {
-  final _pwCtrl = TextEditingController();
-  bool _obscurePw = true;
   String _selectedSemester = '__ALL__';
 
   @override
-  void dispose() {
-    _pwCtrl.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final app = context.read<AppState>();
+      if (app.isLoggedIn &&
+          app.insData == null &&
+          !app.isInsLoading &&
+          app.insError == null) {
+        app.syncIns();
+      }
+    });
   }
 
-  Future<void> _saveAndLoad() async {
-    if (_pwCtrl.text.trim().isEmpty) return;
-    final app = context.read<AppState>();
-    await app.saveInsPassword(_pwCtrl.text.trim());
-    _pwCtrl.clear();
+  Future<void> _showOverridePasswordDialog(
+      BuildContext context, AppState app) async {
+    final ctrl =
+        TextEditingController(text: app.credentials?.insPassword ?? '');
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(app.s.changeInsPassword),
+        content: TextField(
+          controller: ctrl,
+          obscureText: true,
+          decoration: InputDecoration(
+            labelText: app.s.insPasswordOptional,
+            helperText: app.s.insPasswordHintOverride,
+            helperMaxLines: 2,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(app.s.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            child: Text(app.s.save),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (saved != null) {
+      await app.saveInsPassword(saved);
+    }
   }
 
   (IconData icon, Color bg, Color fg) _subjectStyle(
@@ -103,7 +141,6 @@ class _InsScreenState extends State<InsScreen> {
     final s = app.s;
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final hasPassword = (app.credentials?.insPassword ?? '').isNotEmpty;
     final data = app.insData;
 
     return Scaffold(
@@ -111,135 +148,59 @@ class _InsScreenState extends State<InsScreen> {
         title: s.insPortalTitle,
         overline: s.portalHeader,
       ),
-      body: !hasPassword
-          ? _buildPasswordPrompt(context, cs, tt, s)
-          : data == null
-              ? Center(
-                  child: app.isInsLoading
-                      ? const CircularProgressIndicator()
-                      : Padding(
-                          padding: const EdgeInsets.all(28),
-                          child: ExpressiveCard(
-                            borderRadius: 28,
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SquircleIcon(
-                                  size: 64,
-                                  radius: 20,
-                                  iconSize: 32,
-                                  icon: Icons.workspace_premium_outlined,
-                                  backgroundColor: cs.errorContainer,
-                                  iconColor: cs.onErrorContainer,
+      body: data == null
+          ? Center(
+              child: app.isInsLoading
+                  ? const CircularProgressIndicator()
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 420),
+                        child: ExpressiveCard(
+                          borderRadius: 28,
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SquircleIcon(
+                                size: 64,
+                                radius: 20,
+                                iconSize: 32,
+                                icon: Icons.workspace_premium_outlined,
+                                backgroundColor: cs.errorContainer,
+                                iconColor: cs.onErrorContainer,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                app.insError ?? s.insLoadError,
+                                textAlign: TextAlign.center,
+                                style: tt.bodyMedium,
+                              ),
+                              const SizedBox(height: 18),
+                              FilledButton.icon(
+                                onPressed: () => app.syncIns(),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: cs.primary,
+                                  foregroundColor: cs.onPrimary,
+                                  shape: const StadiumBorder(),
                                 ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  s.insLoadError,
-                                  textAlign: TextAlign.center,
-                                  style: tt.bodyMedium,
-                                ),
-                                const SizedBox(height: 18),
-                                FilledButton.icon(
-                                  onPressed: () => app.syncIns(),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: cs.primary,
-                                    foregroundColor: cs.onPrimary,
-                                    shape: const StadiumBorder(),
-                                  ),
-                                  icon: const Icon(Icons.refresh_rounded),
-                                  label: Text(s.refresh),
-                                ),
-                              ],
-                            ),
+                                icon: const Icon(Icons.refresh_rounded),
+                                label: Text(s.retryLabel),
+                              ),
+                              const SizedBox(height: 8),
+                              TextButton.icon(
+                                onPressed: () =>
+                                    _showOverridePasswordDialog(context, app),
+                                icon: const Icon(Icons.key_outlined, size: 18),
+                                label: Text(s.insOverridePasswordBtn),
+                              ),
+                            ],
                           ),
                         ),
-                )
-              : _buildGradesView(context, data, cs, tt, s, app),
-    );
-  }
-
-  Widget _buildPasswordPrompt(
-    BuildContext context,
-    ColorScheme cs,
-    TextTheme tt,
-    dynamic s,
-  ) {
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: ExpressiveCard(
-            borderRadius: 28,
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: SquircleIcon(
-                    size: 60,
-                    radius: 20,
-                    iconSize: 30,
-                    icon: Icons.workspace_premium_rounded,
-                    backgroundColor: cs.primaryFixed,
-                    iconColor: cs.primary,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  s.insNotConfigured,
-                  textAlign: TextAlign.center,
-                  style: tt.bodyLarge,
-                ),
-                const SizedBox(height: 18),
-                TextField(
-                  controller: _pwCtrl,
-                  obscureText: _obscurePw,
-                  onSubmitted: (_) => _saveAndLoad(),
-                  decoration: InputDecoration(
-                    hintText: s.insPasswordOptional,
-                    prefixIcon: const Icon(Icons.key_outlined),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePw
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
                       ),
-                      onPressed: () =>
-                          setState(() => _obscurePw = !_obscurePw),
                     ),
-                    filled: true,
-                    fillColor: cs.surfaceContainerLow,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(color: cs.primary, width: 2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 50,
-                  child: FilledButton(
-                    onPressed: _saveAndLoad,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: cs.primary,
-                      foregroundColor: cs.onPrimary,
-                      shape: const StadiumBorder(),
-                    ),
-                    child: Text(s.saveInsPassword),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+            )
+          : _buildGradesView(context, data, cs, tt, s, app),
     );
   }
 

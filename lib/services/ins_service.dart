@@ -10,13 +10,22 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:xml/xml.dart';
 
 import '../models/models.dart';
+import 'http_redirects.dart';
 
-/// Direct INS (http://ins.inha.uz) client — NO proxy used.
+class InsException implements Exception {
+  final String message;
+  InsException(this.message);
+  @override
+  String toString() => message;
+}
+
+/// Direct INS (ins.inha.uz) client — NO proxy used.
 class InsService {
   static const String baseUrl = 'http://ins.inha.uz';
+  static const String httpsBaseUrl = 'https://ins.inha.uz';
   static const Map<String, String> _headers = {
     'User-Agent':
-        'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
   };
 
@@ -25,8 +34,8 @@ class InsService {
       BaseOptions(
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 30),
-        followRedirects: true,
-        maxRedirects: 8,
+        followRedirects: false,
+        maxRedirects: 10,
         headers: _headers,
         validateStatus: (s) => s != null && s < 500,
       ),
@@ -49,38 +58,111 @@ class InsService {
     final jar = CookieJar();
     final dio = _createDio(jar);
 
-    // 1. Login to INS
-    final loginUrl = '$baseUrl/ITIS/Start.aspx';
-    final r1 = await dio.get<String>(loginUrl);
+    // 1. Fetch login page (try HTTP first, fallback to HTTPS on socket failure).
+    late RedirectResponse<String> r1;
+    try {
+      r1 = await requestWithRedirects<String>(
+        dio,
+        '$baseUrl/ITIS/Start.aspx',
+        options: Options(responseType: ResponseType.plain),
+      );
+    } catch (e) {
+      try {
+        r1 = await requestWithRedirects<String>(
+          dio,
+          '$httpsBaseUrl/ITIS/Start.aspx',
+          options: Options(responseType: ResponseType.plain),
+        );
+      } catch (e2) {
+        throw InsException('INS connection failed: $e2');
+      }
+    }
+
     final doc1 = html_parser.parse(r1.data ?? '');
+    final form = doc1.querySelector('form');
+    final actionRaw = form?.attributes['action'];
+    final postUri = (actionRaw != null && actionRaw.isNotEmpty)
+        ? r1.finalUri.resolve(actionRaw)
+        : r1.finalUri;
 
-    String field(String name) =>
-        doc1.querySelector('input[name="$name"]')?.attributes['value'] ?? '';
+    final payload = <String, String>{};
+    for (final input in doc1.querySelectorAll('input[name]')) {
+      final name = input.attributes['name'] ?? '';
+      if (name.isEmpty) continue;
+      final type = (input.attributes['type'] ?? 'text').toLowerCase();
+      if (type == 'submit' || type == 'button' || type == 'reset') continue;
+      payload[name] = input.attributes['value'] ?? '';
+    }
+    payload['txtInhaID'] = studentId.trim().toUpperCase();
+    payload['txtPW'] = insPassword;
+    payload['btnLogin'] =
+        doc1.querySelector('input[name="btnLogin"]')?.attributes['value'] ?? '';
 
-    final r2 = await dio.post<String>(
-      loginUrl,
-      data: {
-        '__VIEWSTATE': field('__VIEWSTATE'),
-        '__VIEWSTATEGENERATOR': field('__VIEWSTATEGENERATOR'),
-        '__EVENTVALIDATION': field('__EVENTVALIDATION'),
-        'txtInhaID': studentId,
-        'txtPW': insPassword,
-        'btnLogin': 'Login',
-      },
-      options: Options(contentType: Headers.formUrlEncodedContentType),
+    final r2 = await requestWithRedirects<String>(
+      dio,
+      postUri.toString(),
+      method: 'POST',
+      data: payload,
+      options: Options(
+        contentType: Headers.formUrlEncodedContentType,
+        responseType: ResponseType.plain,
+      ),
     );
 
-    final finalUrl = r2.realUri.toString().toLowerCase();
-    final body = (r2.data ?? '').toLowerCase();
-    if (finalUrl.contains('start.aspx') && !body.contains('logout')) {
-      return null;
+    final body2 = r2.data ?? '';
+    final doc2 = html_parser.parse(body2);
+    final errMsg = doc2
+            .querySelector('input[name="errorMessage"]')
+            ?.attributes['value']
+            ?.trim() ??
+        '';
+    if (errMsg.isNotEmpty) {
+      throw InsException(errMsg);
     }
+
+    // Handle JS redirect if Start.aspx emits window.location / location.href
+    var authedUri = r2.finalUri;
+    if (doc2.querySelector('input[name="txtPW"]') == null) {
+      final jsRedirect = RegExp(
+        r'''(?:window\.|top\.|self\.)?location(?:\.href)?\s*=\s*["']([^"']+)["']''',
+        caseSensitive: false,
+      ).firstMatch(body2);
+      if (jsRedirect != null) {
+        final nextTarget = jsRedirect.group(1)!.trim();
+        if (nextTarget.isNotEmpty &&
+            !nextTarget.toLowerCase().contains('start.aspx')) {
+          final rNext = await requestWithRedirects<String>(
+            dio,
+            r2.finalUri.resolve(nextTarget).toString(),
+            options: Options(responseType: ResponseType.plain),
+          );
+          authedUri = rNext.finalUri;
+        }
+      }
+    }
+
+    if (authedUri.path.toLowerCase().contains('start.aspx') &&
+        doc2.querySelector('input[name="txtPW"]') != null &&
+        !body2.toLowerCase().contains('logout')) {
+      final alertMatch =
+          RegExp(r'''alert\(\s*["']([^"']+)["']\s*\)''').firstMatch(body2);
+      throw InsException(
+        alertMatch != null
+            ? alertMatch.group(1)!
+            : 'Invalid student ID or INS password',
+      );
+    }
+
+    final origin =
+        '${authedUri.scheme}://${authedUri.host}${authedUri.hasPort ? ':${authedUri.port}' : ''}';
 
     // 2. Fetch rank from MarkView.aspx
     String? rank;
     try {
-      final rRank = await dio.get<String>(
-        '$baseUrl/ITIS/STD/SJ/SJ_51001/MarkView.aspx',
+      final rRank = await requestWithRedirects<String>(
+        dio,
+        '$origin/ITIS/STD/SJ/SJ_51001/MarkView.aspx',
+        options: Options(responseType: ResponseType.plain),
       );
       final rankDoc = html_parser.parse(rRank.data ?? '');
       final rankSpan = rankDoc.querySelector('span#lbRank');
@@ -91,12 +173,15 @@ class InsService {
 
     // 3. Try XML via MarkView_rpx.aspx -> MarkView_xml.aspx
     try {
-      final rFrame = await dio.get<String>(
-        '$baseUrl/ITIS/STD/SJ/SJ_51001/MarkView_rpx.aspx?gubun=inform',
+      final rFrame = await requestWithRedirects<String>(
+        dio,
+        '$origin/ITIS/STD/SJ/SJ_51001/MarkView_rpx.aspx?gubun=inform',
+        options: Options(responseType: ResponseType.plain),
       );
-      final xmlUrl = _extractXmlUrl(rFrame.data ?? '');
+      final xmlUrl = _extractXmlUrl(rFrame.data ?? '', rFrame.finalUri);
       if (xmlUrl != null) {
-        final rXml = await dio.get<List<int>>(
+        final rXml = await requestWithRedirects<List<int>>(
+          dio,
           xmlUrl,
           options: Options(responseType: ResponseType.bytes),
         );
@@ -108,16 +193,16 @@ class InsService {
     } catch (_) {}
 
     // 4. HTML fallback: pyungka_kwamok_list.aspx
-    return _fetchHtmlFallback(dio, rank: rank);
+    return _fetchHtmlFallback(dio, origin, rank: rank);
   }
 
-  String? _extractXmlUrl(String html) {
+  String? _extractXmlUrl(String html, Uri baseUri) {
     final m = RegExp(
       r'''ViewerReportInForm\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']''',
     ).firstMatch(html);
     if (m == null) return null;
-    final endpoint = m.group(2)!;
-    return '$baseUrl/ITIS/STD/SJ/SJ_51001/$endpoint';
+    final endpoint = m.group(2)!.trim();
+    return baseUri.resolve(endpoint).toString();
   }
 
   String _decodeEucKrOrUtf8(List<int> bytes) {
@@ -173,7 +258,9 @@ class InsService {
         ));
       }
 
-      if (courses.isEmpty) return null;
+      final hasStudent = studentInfo['id']?.isNotEmpty == true ||
+          studentInfo['name']?.isNotEmpty == true;
+      if (courses.isEmpty && !hasStudent) return null;
       return InsGradeData(
         courses: courses,
         gpaInfo: gpaInfo,
@@ -185,10 +272,16 @@ class InsService {
     }
   }
 
-  Future<InsGradeData?> _fetchHtmlFallback(Dio dio, {String? rank}) async {
+  Future<InsGradeData?> _fetchHtmlFallback(
+    Dio dio,
+    String origin, {
+    String? rank,
+  }) async {
     try {
-      final r = await dio.get<String>(
-        '$baseUrl/ITIS/STD/SU/SU_21001/pyungka_kwamok_list.aspx',
+      final r = await requestWithRedirects<String>(
+        dio,
+        '$origin/ITIS/STD/SU/SU_21001/pyungka_kwamok_list.aspx',
+        options: Options(responseType: ResponseType.plain),
       );
       final doc = html_parser.parse(r.data ?? '');
       final table = doc.querySelector('table#dgList') ??
