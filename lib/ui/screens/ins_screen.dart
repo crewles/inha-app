@@ -75,7 +75,7 @@ class _InsScreenState extends State<InsScreen> {
         code.startsWith('SOC') ||
         code.startsWith('ICE') ||
         code.startsWith('CIS')) {
-      return (Icons.terminal_rounded, cs.primaryFixed, cs.primary);
+      return (Icons.terminal_rounded, cs.primaryFixed, cs.onPrimaryFixed);
     }
     if (code.startsWith('MTH') ||
         code.startsWith('MAT') ||
@@ -85,14 +85,14 @@ class _InsScreenState extends State<InsScreen> {
     if (code.startsWith('ENG') ||
         code.startsWith('KOR') ||
         code.startsWith('HUM')) {
-      return (Icons.edit_note_rounded, cs.secondaryFixed, cs.secondary);
+      return (Icons.edit_note_rounded, cs.secondaryFixed, cs.onSecondaryFixed);
     }
     if (code.startsWith('PHY') ||
         code.startsWith('CHM') ||
         code.startsWith('BIO')) {
-      return (Icons.science_outlined, cs.tertiaryFixed, cs.tertiary);
+      return (Icons.science_outlined, cs.tertiaryFixed, cs.onTertiaryFixed);
     }
-    return (Icons.menu_book_rounded, cs.primaryFixed, cs.primary);
+    return (Icons.menu_book_rounded, cs.primaryFixed, cs.onPrimaryFixed);
   }
 
   (Color bg, Color fg) _gradeBadgeColors(String grade, ColorScheme cs) {
@@ -226,15 +226,15 @@ class _InsScreenState extends State<InsScreen> {
         ? data.courses
         : data.courses.where((c) => c.semester == effectiveSemester).toList();
 
-    final gpa = (data.gpaInfo['gpa'] ?? '').trim();
+    final gpa = formatGpa(data.gpaInfo['gpa'] ?? '');
     final gpaDisplay = gpa.isEmpty ? '—' : gpa;
     final hasNumericGpa = double.tryParse(gpa) != null;
 
-    final acq = (data.gpaInfo['credits_acquired'] ?? '').trim();
-    final att = (data.gpaInfo['credits_attempted'] ?? '').trim();
+    final acq = formatCredits(data.gpaInfo['credits_acquired'] ?? '');
+    final att = formatCredits(data.gpaInfo['credits_attempted'] ?? '');
     final rank = (data.studentInfo['rank'] ?? '').trim();
 
-    final rawName = (data.studentInfo['name'] ?? '').trim();
+    final rawName = formatPersonName(data.studentInfo['name'] ?? '');
     final studentId = (data.studentInfo['id'] ?? '').trim().isNotEmpty
         ? data.studentInfo['id']!.trim()
         : (app.credentials?.studentId ?? '');
@@ -617,9 +617,10 @@ class _InsScreenState extends State<InsScreen> {
     final (badgeBg, badgeFg) = _gradeBadgeColors(c.grade, cs);
     final pts = _gradePoints45(c.grade);
 
+    final cleanCredit = formatCredits(c.credit);
     final metaParts = <String>[
       if (c.courseNumber.isNotEmpty) c.courseNumber,
-      if (c.credit.isNotEmpty) '${c.credit} cr',
+      if (cleanCredit.isNotEmpty) '$cleanCredit cr',
       if (c.courseType.isNotEmpty) c.courseType,
     ];
 

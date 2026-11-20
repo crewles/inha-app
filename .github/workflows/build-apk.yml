@@ -24,6 +24,24 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Read app version
+        id: ver
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Configure Android Release Signing
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > android/app/upload-keystore.jks
+          printf "storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=upload-keystore.jks\n" \
+            "$KEYSTORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > android/key.properties
+
       - name: Install dependencies
         run: flutter pub get
 
@@ -34,20 +52,24 @@ jobs:
         run: flutter build apk --release --target-platform android-arm64
 
       - name: Rename APK
-        run: cp build/app/outputs/flutter-apk/app-release.apk inha-app-v1.0.1-arm64.apk
+        run: cp build/app/outputs/flutter-apk/app-release.apk "inha-app-v${{ steps.ver.outputs.version }}-arm64.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: inha-app-arm64-release-apk
-          path: inha-app-v1.0.1-arm64.apk
+          path: inha-app-v${{ steps.ver.outputs.version }}-arm64.apk
 
-      - name: Attach APK to v1.0.1 Release
+      - name: Attach APK to Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view v1.0.1 >/dev/null 2>&1; then
-            gh release upload v1.0.1 inha-app-v1.0.1-arm64.apk --clobber
+          TAG="v${{ steps.ver.outputs.version }}"
+          APK="inha-app-v${{ steps.ver.outputs.version }}-arm64.apk"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
           else
-            gh release create v1.0.1 inha-app-v1.0.1-arm64.apk --title "Inha App v1.0.1 (arm64-v8a)" --notes "Исправлен мгновенный вылет на старте (R8 удалял WorkDatabase_Impl для WorkManager)."
+            gh release create "$TAG" "$APK" \
+              --title "Inha App $TAG (arm64-v8a)" \
+              --notes "Исправлено форматирование GPA/имён, контраст иконок в тёмной теме, веб-сессия eClass (посещаемость и все категории оценок), авто-вход в INS и экраны Course Detail."
           fi

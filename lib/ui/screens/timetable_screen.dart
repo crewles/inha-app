@@ -157,7 +157,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                       iconSize: 36,
                       icon: Icons.calendar_month_rounded,
                       backgroundColor: cs.primaryFixed,
-                      iconColor: cs.primary,
+                      iconColor: cs.onPrimaryFixed,
                     ),
                     const SizedBox(height: 18),
                     Text(

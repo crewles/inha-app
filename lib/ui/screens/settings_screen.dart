@@ -139,7 +139,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final settings = app.settings;
 
     final studentId = app.credentials?.studentId ?? '';
-    final studentName = (app.insData?.studentInfo['name'] ?? '').trim();
+    final studentName = formatPersonName(app.insData?.studentInfo['name'] ?? '');
     final gradeYear = (app.insData?.studentInfo['grade_year'] ?? '').trim();
     final displayName = studentName.isNotEmpty ? studentName : studentId;
     final hasCustomIns =

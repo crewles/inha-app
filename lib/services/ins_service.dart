@@ -234,11 +234,26 @@ class InsService {
         if (rank != null && rank.isNotEmpty) 'rank': rank,
       };
 
+      String cleanGpa(String raw) {
+        final v = double.tryParse(raw.trim().replaceAll(',', '.'));
+        return v == null ? raw.trim() : v.toStringAsFixed(2);
+      }
+
+      String cleanNum(String raw) {
+        final v = double.tryParse(raw.trim().replaceAll(',', '.'));
+        if (v == null) return raw.trim();
+        if (v == v.roundToDouble()) return v.round().toString();
+        return v
+            .toStringAsFixed(2)
+            .replaceAll(RegExp(r'0+$'), '')
+            .replaceAll(RegExp(r'\.$'), '');
+      }
+
       final gpaInfo = <String, String>{
-        'gpa': getText(main, 'COM_PYUNG'),
-        'credits_attempted': getText(main, 'COM_CREDIT'),
-        'credits_acquired': getText(main, 'SIN_CREDIT'),
-        'total_score': getText(main, 'TOT_JUM'),
+        'gpa': cleanGpa(getText(main, 'COM_PYUNG')),
+        'credits_attempted': cleanNum(getText(main, 'COM_CREDIT')),
+        'credits_acquired': cleanNum(getText(main, 'SIN_CREDIT')),
+        'total_score': cleanNum(getText(main, 'TOT_JUM')),
       };
 
       final courses = <InsCourseGrade>[];
@@ -250,7 +265,7 @@ class InsService {
         courses.add(InsCourseGrade(
           courseNumber: number,
           title: title,
-          credit: getText(mark, 'CREDIT'),
+          credit: cleanNum(getText(mark, 'CREDIT')),
           grade: grade.isEmpty ? 'none' : grade,
           courseType: getText(mark, 'JONG_AKNAME'),
           semester: getText(mark, 'DISPLAY_YEARTERM'),

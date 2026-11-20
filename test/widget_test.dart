@@ -14,6 +14,7 @@ import 'package:inhahub/ui/screens/login_screen.dart';
 import 'package:inhahub/ui/screens/settings_screen.dart';
 import 'package:inhahub/ui/screens/timetable_screen.dart';
 import 'package:inhahub/ui/theme/app_theme.dart';
+import 'package:inhahub/ui/widgets/expressive_widgets.dart';
 
 class FakeAppState extends AppState {
   int downloadsBytes = 12 * 1024 * 1024;
@@ -213,13 +214,13 @@ class FakeAppState extends AppState {
           ),
         ],
         gpaInfo: const {
-          'gpa': '3.85',
-          'credits_acquired': '96',
-          'credits_attempted': '96',
+          'gpa': '3.960000',
+          'credits_acquired': '96.00',
+          'credits_attempted': '96.00',
         },
         studentInfo: const {
           'id': 'U2210001',
-          'name': 'Jasmina Kurbanova',
+          'name': 'SIRAZETDINOV ARTEM',
           'dept': 'SOCIE',
           'grade_year': '3',
           'rank': '12',
@@ -443,6 +444,22 @@ void main() {
     expect(wrongLevel, isNull);
   });
 
+  test('formatGpa, formatCredits, and formatPersonName normalize portal strings',
+      () {
+    expect(formatGpa('3.960000'), '3.96');
+    expect(formatGpa('4'), '4.00');
+    expect(formatGpa('—'), '—');
+
+    expect(formatCredits('96.0000'), '96');
+    expect(formatCredits('3.50'), '3.5');
+
+    expect(formatPersonName('SIRAZETDINOV'), 'Sirazetdinov');
+    expect(formatPersonName('SIRAZETDINOV   ARTEM'), 'Sirazetdinov Artem');
+    expect(formatPersonName('KIM DONG-HYUN'), 'Kim Dong-Hyun');
+    expect(formatPersonName("O'TKIR"), "O'tkir");
+    expect(formatPersonName('McDonald'), 'McDonald');
+  });
+
   testWidgets('LoginScreen renders 2 fields, unified password note, and switches language',
       (tester) async {
     final app = FakeAppState(loggedIn: false);
@@ -469,9 +486,11 @@ void main() {
 
     expect(find.text('Data Structures & Algorithms'), findsOneWidget);
     expect(find.textContaining('ID:'), findsNothing);
+    expect(find.textContaining('Sirazetdinov'), findsOneWidget);
     expect(find.text('Prof. Kim Dong-Hyun'), findsOneWidget);
     expect(find.textContaining('B201'), findsOneWidget);
-    expect(find.text('3.85'), findsOneWidget);
+    expect(find.text('3.96'), findsOneWidget);
+    expect(find.text('3.960000'), findsNothing);
     expect(find.text('Syllabus'), findsOneWidget);
   });
 
@@ -564,8 +583,8 @@ void main() {
     await tester.pumpWidget(_wrap(app, const InsScreen()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Jasmina Kurbanova'), findsOneWidget);
-    expect(find.text('3.85'), findsOneWidget);
+    expect(find.text('Sirazetdinov Artem'), findsOneWidget);
+    expect(find.text('3.96'), findsOneWidget);
     expect(find.text('Computer Algorithms'), findsOneWidget);
 
     final noInsApp = FakeAppState(withIns: false);
@@ -581,6 +600,7 @@ void main() {
     final customApp = FakeAppState(withIns: true);
     await tester.pumpWidget(_wrap(customApp, const SettingsScreen()));
     await tester.pumpAndSettle();
+    expect(find.text('Sirazetdinov Artem'), findsOneWidget);
     expect(find.text('Custom'), findsOneWidget);
 
     final autoApp = FakeAppState(withIns: false);

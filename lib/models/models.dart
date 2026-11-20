@@ -599,5 +599,5 @@ class CourseScheduleInfo {
   });
 
   String get classroomSummary => classrooms.join(', ');
-  String get scheduleSummary => daySummaries.join(' · ');
+  String get scheduleSummary => daySummaries.join(', ');
 }

@@ -344,7 +344,7 @@ class S {
   String get logoutPortal =>
       isRu ? 'Выйти из аккаунта' : 'Log out of Inha Portal';
   String get appVersionFooter =>
-      'Inha App v1.0.1 • Tashkent Campus';
+      'Inha App v1.0.2 • Tashkent Campus';
   String get localStorageFooter => isRu
       ? 'Локальное хранилище SQLite • Прямое подключение к eClass & INS'
       : 'Local SQLite Storage • Direct eClass & INS Client';

@@ -1938,7 +1938,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                       iconSize: 20,
                       icon: Icons.offline_pin_rounded,
                       backgroundColor: cs.primaryFixed,
-                      iconColor: cs.primary,
+                      iconColor: cs.onPrimaryFixed,
                     ),
                     const SizedBox(width: 12),
                     Expanded(

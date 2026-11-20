@@ -698,3 +698,42 @@ String formatRelativeTime(int epochMs, S s) {
   if (diff.inDays < 1) return s.hoursAgo(diff.inHours);
   return s.daysAgo(diff.inDays);
 }
+
+String formatGpa(String raw) {
+  final clean = raw.trim();
+  if (clean.isEmpty) return '';
+  final parsed = double.tryParse(clean.replaceAll(',', '.'));
+  if (parsed == null) return clean;
+  return parsed.toStringAsFixed(2);
+}
+
+String formatCredits(String raw) {
+  final clean = raw.trim();
+  if (clean.isEmpty) return '';
+  final parsed = double.tryParse(clean.replaceAll(',', '.'));
+  if (parsed == null) return clean;
+  if (parsed == parsed.roundToDouble()) return parsed.round().toString();
+  return parsed
+      .toStringAsFixed(2)
+      .replaceAll(RegExp(r'0+$'), '')
+      .replaceAll(RegExp(r'\.$'), '');
+}
+
+String formatPersonName(String raw) {
+  final collapsed = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
+  if (collapsed.isEmpty) return '';
+
+  String titleSegment(String seg) {
+    if (seg.isEmpty) return seg;
+    return seg[0].toUpperCase() + seg.substring(1).toLowerCase();
+  }
+
+  return collapsed.split(' ').map((word) {
+    final isAllUpper =
+        word == word.toUpperCase() && word != word.toLowerCase();
+    final isAllLower =
+        word == word.toLowerCase() && word != word.toUpperCase();
+    if (!isAllUpper && !isAllLower) return word;
+    return word.split('-').map(titleSegment).join('-');
+  }).join(' ');
+}

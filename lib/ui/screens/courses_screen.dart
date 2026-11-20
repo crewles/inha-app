@@ -27,13 +27,13 @@ class CoursesScreen extends StatelessWidget {
     final icon = icons[course.id.hashCode.abs() % icons.length];
     switch (idx) {
       case 0:
-        return (cs.primaryFixed, cs.primary, icon);
+        return (cs.primaryFixed, cs.onPrimaryFixed, icon);
       case 1:
-        return (cs.secondaryFixed, cs.secondary, icon);
+        return (cs.secondaryFixed, cs.onSecondaryFixed, icon);
       case 2:
         return (cs.surfaceContainerHigh, cs.primary, icon);
       default:
-        return (cs.tertiaryFixed, cs.tertiary, icon);
+        return (cs.tertiaryFixed, cs.onTertiaryFixed, icon);
     }
   }
 
@@ -47,10 +47,11 @@ class CoursesScreen extends StatelessWidget {
     final hasPastCourses = app.courses.any((c) => !c.isCurrent);
 
     final studentName = (app.insData?.studentInfo['name'] ?? '').trim();
-    final firstName =
-        studentName.isEmpty ? '' : studentName.split(RegExp(r'\s+')).first;
+    final firstName = studentName.isEmpty
+        ? ''
+        : formatPersonName(studentName.split(RegExp(r'\s+')).first);
     final gradeYear = (app.insData?.studentInfo['grade_year'] ?? '').trim();
-    final insGpa = (app.insData?.gpaInfo['gpa'] ?? '').trim();
+    final insGpa = formatGpa(app.insData?.gpaInfo['gpa'] ?? '');
 
     final visibleIds = visible.map((c) => c.id).toSet();
     final totalPending = app.allAssignments
@@ -233,7 +234,7 @@ class CoursesScreen extends StatelessWidget {
             iconSize: 22,
             icon: hasGpa ? Icons.auto_graph_rounded : Icons.school_rounded,
             backgroundColor: cs.primaryFixed,
-            iconColor: cs.primary,
+            iconColor: cs.onPrimaryFixed,
           ),
           const SizedBox(width: 14),
           Expanded(
