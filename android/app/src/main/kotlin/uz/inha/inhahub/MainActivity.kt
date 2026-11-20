@@ -18,32 +18,36 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "schedule" -> {
-                        val minutes = (call.argument<Int>("intervalMinutes") ?: 120).coerceAtLeast(15)
-                        val constraints = Constraints.Builder()
-                            .setRequiredNetworkType(NetworkType.CONNECTED)
-                            .build()
-                        val request = PeriodicWorkRequestBuilder<EclassSyncWorker>(
-                            minutes.toLong(),
-                            TimeUnit.MINUTES
-                        )
-                            .setConstraints(constraints)
-                            .build()
-                        WorkManager.getInstance(applicationContext)
-                            .enqueueUniquePeriodicWork(
-                                uniqueWorkName,
-                                ExistingPeriodicWorkPolicy.UPDATE,
-                                request
+                try {
+                    when (call.method) {
+                        "schedule" -> {
+                            val minutes = (call.argument<Int>("intervalMinutes") ?: 120).coerceAtLeast(15)
+                            val constraints = Constraints.Builder()
+                                .setRequiredNetworkType(NetworkType.CONNECTED)
+                                .build()
+                            val request = PeriodicWorkRequestBuilder<EclassSyncWorker>(
+                                minutes.toLong(),
+                                TimeUnit.MINUTES
                             )
-                        result.success(true)
+                                .setConstraints(constraints)
+                                .build()
+                            WorkManager.getInstance(applicationContext)
+                                .enqueueUniquePeriodicWork(
+                                    uniqueWorkName,
+                                    ExistingPeriodicWorkPolicy.UPDATE,
+                                    request
+                                )
+                            result.success(true)
+                        }
+                        "cancel" -> {
+                            WorkManager.getInstance(applicationContext)
+                                .cancelUniqueWork(uniqueWorkName)
+                            result.success(true)
+                        }
+                        else -> result.notImplemented()
                     }
-                    "cancel" -> {
-                        WorkManager.getInstance(applicationContext)
-                            .cancelUniqueWork(uniqueWorkName)
-                        result.success(true)
-                    }
-                    else -> result.notImplemented()
+                } catch (t: Throwable) {
+                    result.error("BG_SYNC_ERROR", t.message, null)
                 }
             }
     }

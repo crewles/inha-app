@@ -19,18 +19,20 @@ class NotificationService {
 
   Future<void> init() async {
     if (_initialized) return;
-    tz_data.initializeTimeZones();
-    _tashkent = tz.getLocation('Asia/Tashkent');
-    tz.setLocalLocation(_tashkent);
+    try {
+      tz_data.initializeTimeZones();
+      _tashkent = tz.getLocation('Asia/Tashkent');
+      tz.setLocalLocation(_tashkent);
 
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initSettings = InitializationSettings(android: androidInit);
-    await _plugin.initialize(initSettings);
+      const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const initSettings = InitializationSettings(android: androidInit);
+      await _plugin.initialize(initSettings);
 
-    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    await androidPlugin?.requestNotificationsPermission();
-    _initialized = true;
+      final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      await androidPlugin?.requestNotificationsPermission();
+      _initialized = true;
+    } catch (_) {}
   }
 
   Future<void> showNotification({
