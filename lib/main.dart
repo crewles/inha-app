@@ -5,8 +5,7 @@ import 'package:provider/provider.dart';
 import 'state/app_state.dart';
 import 'ui/screens/home_shell.dart';
 import 'ui/screens/login_screen.dart';
-
-const Color _inhaBlueSeed = Color(0xFF005BAC);
+import 'ui/theme/app_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,29 +29,17 @@ class InhaApp extends StatelessWidget {
         final useDynamic = app.settings.dynamicColor;
         final lightScheme = (useDynamic && lightDynamic != null)
             ? lightDynamic.harmonized()
-            : ColorScheme.fromSeed(
-                seedColor: _inhaBlueSeed,
-                brightness: Brightness.light,
-              );
+            : AppTheme.lightColorScheme;
         final darkScheme = (useDynamic && darkDynamic != null)
             ? darkDynamic.harmonized()
-            : ColorScheme.fromSeed(
-                seedColor: _inhaBlueSeed,
-                brightness: Brightness.dark,
-              );
+            : AppTheme.darkColorScheme;
 
         return MaterialApp(
           title: 'Inha App',
           debugShowCheckedModeBanner: false,
           themeMode: app.themeMode,
-          theme: ThemeData(
-            useMaterial3: true,
-            colorScheme: lightScheme,
-          ),
-          darkTheme: ThemeData(
-            useMaterial3: true,
-            colorScheme: darkScheme,
-          ),
+          theme: AppTheme.buildTheme(lightScheme),
+          darkTheme: AppTheme.buildTheme(darkScheme),
           home: app.isInitializing
               ? const Scaffold(
                   body: Center(child: CircularProgressIndicator()),

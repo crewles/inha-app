@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../data/app_database.dart';
 import '../l10n/strings.dart';
@@ -414,8 +418,32 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  Future<int> getDownloadsCacheBytes() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final filesDir = Directory(p.join(dir.path, 'downloads'));
+      if (!await filesDir.exists()) return 0;
+      int total = 0;
+      await for (final entity in filesDir.list(recursive: true)) {
+        if (entity is File) {
+          total += await entity.length();
+        }
+      }
+      return total;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   Future<void> clearCache() async {
     await _db.clearCacheOnly();
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final filesDir = Directory(p.join(dir.path, 'downloads'));
+      if (await filesDir.exists()) {
+        await filesDir.delete(recursive: true);
+      }
+    } catch (_) {}
     courses = [];
     allAssignments = [];
     gradesByCourse.clear();

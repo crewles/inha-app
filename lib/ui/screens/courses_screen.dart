@@ -1,172 +1,448 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/models.dart';
+import '../../services/eclass_service.dart';
 import '../../state/app_state.dart';
+import '../widgets/expressive_widgets.dart';
 import 'course_detail_screen.dart';
 
 class CoursesScreen extends StatelessWidget {
   const CoursesScreen({super.key});
+
+  (Color bg, Color fg, IconData icon) _courseAccent(
+      Course course, ColorScheme cs) {
+    if (!course.isCurrent) {
+      return (cs.surfaceContainerHigh, cs.onSurfaceVariant, Icons.book_rounded);
+    }
+    const icons = [
+      Icons.terminal_rounded,
+      Icons.memory_rounded,
+      Icons.hub_rounded,
+      Icons.layers_rounded,
+      Icons.menu_book_rounded,
+    ];
+    final idx = course.id.hashCode.abs() % 4;
+    final icon = icons[course.id.hashCode.abs() % icons.length];
+    switch (idx) {
+      case 0:
+        return (cs.primaryFixed, cs.primary, icon);
+      case 1:
+        return (cs.secondaryFixed, cs.secondary, icon);
+      case 2:
+        return (cs.surfaceContainerHigh, cs.primary, icon);
+      default:
+        return (cs.tertiaryFixed, cs.tertiary, icon);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     final s = app.s;
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     final visible = app.visibleCourses;
     final hasPastCourses = app.courses.any((c) => !c.isCurrent);
 
+    final studentName = (app.insData?.studentInfo['name'] ?? '').trim();
+    final firstName =
+        studentName.isEmpty ? '' : studentName.split(RegExp(r'\s+')).first;
+    final gradeYear = (app.insData?.studentInfo['grade_year'] ?? '').trim();
+    final insGpa = (app.insData?.gpaInfo['gpa'] ?? '').trim();
+
+    final visibleIds = visible.map((c) => c.id).toSet();
+    final totalPending = app.allAssignments
+        .where((a) => visibleIds.contains(a.courseId) && !a.isSubmitted)
+        .length;
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(s.navCourses),
+      appBar: ExpressiveAppBar(
+        title: s.navCourses,
+        overline: s.portalHeader,
         actions: [
-          if (app.isSyncing)
-            const Padding(
-              padding: EdgeInsets.only(right: 16),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            )
-          else
-            IconButton(
-              tooltip: s.refresh,
-              icon: const Icon(Icons.refresh_rounded),
-              onPressed: () => app.syncCourses(),
-            ),
+          CircleActionButton(
+            icon: Icons.sync_rounded,
+            tooltip: s.refresh,
+            loading: app.isSyncing,
+            onPressed: () => app.syncCourses(),
+          ),
         ],
       ),
-      body: Column(
-        children: [
-          if (hasPastCourses)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: SizedBox(
-                width: double.infinity,
-                child: SegmentedButton<bool>(
-                  segments: [
-                    ButtonSegment(value: false, label: Text(s.currentSemester)),
-                    ButtonSegment(value: true, label: Text(s.allCourses)),
-                  ],
-                  selected: {app.settings.showAllCourses},
-                  onSelectionChanged: (sel) => app.updateSettings(
-                    app.settings.copyWith(showAllCourses: sel.first),
-                  ),
-                ),
-              ),
-            ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () => app.syncCourses(),
-              child: visible.isEmpty
-                  ? ListView(
+      body: RefreshIndicator(
+        onRefresh: () => app.syncCourses(),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+          children: [
+            if (firstName.isNotEmpty) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(
-                            height: MediaQuery.of(context).size.height * 0.25),
-                        Icon(Icons.menu_book_outlined,
-                            size: 64, color: cs.onSurfaceVariant),
-                        const SizedBox(height: 16),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 32),
-                          child: Text(
-                            s.coursesEmpty,
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyLarge
-                                ?.copyWith(color: cs.onSurfaceVariant),
+                        Text(
+                          s.welcomeBack,
+                          style: tt.labelMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          s.helloUser(firstName),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: tt.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ],
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: visible.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final Course course = visible[index];
-                        final pendingCount = app.allAssignments
-                            .where(
-                                (a) => a.courseId == course.id && !a.isSubmitted)
-                            .length;
-
-                        return Card.filled(
-                          clipBehavior: Clip.antiAlias,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: InkWell(
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    CourseDetailScreen(course: course),
-                              ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 48,
-                                    height: 48,
-                                    decoration: BoxDecoration(
-                                      color: course.isCurrent
-                                          ? cs.primaryContainer
-                                          : cs.surfaceContainerHighest,
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    child: Icon(
-                                      Icons.book_rounded,
-                                      color: course.isCurrent
-                                          ? cs.onPrimaryContainer
-                                          : cs.onSurfaceVariant,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          course.name,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium
-                                              ?.copyWith(
-                                                  fontWeight: FontWeight.w600),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          course.overviewGrade != null
-                                              ? 'ID: ${course.id} • ${course.overviewGrade}'
-                                              : 'ID: ${course.id}',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                  color: cs.onSurfaceVariant),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (pendingCount > 0)
-                                    Badge.count(
-                                      count: pendingCount,
-                                      backgroundColor: cs.error,
-                                      textColor: cs.onError,
-                                    ),
-                                  const SizedBox(width: 8),
-                                  Icon(Icons.chevron_right_rounded,
-                                      color: cs.onSurfaceVariant),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
                     ),
+                  ),
+                  if (gradeYear.isNotEmpty)
+                    ExpressivePill(
+                      icon: Icons.school_outlined,
+                      label: s.yearLabel(gradeYear),
+                      backgroundColor: cs.primaryFixed,
+                      foregroundColor: cs.onPrimaryFixed,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+            if (hasPastCourses) ...[
+              ExpressiveSegmentedControl<bool>(
+                activeColor: cs.primaryContainer,
+                activeForeground: cs.onPrimaryContainer,
+                segments: [
+                  ExpressiveSegment(value: false, label: s.currentSemester),
+                  ExpressiveSegment(value: true, label: s.allCourses),
+                ],
+                selected: app.settings.showAllCourses,
+                onChanged: (val) => app.updateSettings(
+                  app.settings.copyWith(showAllCourses: val),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            if (insGpa.isNotEmpty || visible.isNotEmpty) ...[
+              _buildGlanceCard(
+                context: context,
+                cs: cs,
+                tt: tt,
+                s: s,
+                insGpa: insGpa,
+                courseCount: visible.length,
+                totalPending: totalPending,
+              ),
+              const SizedBox(height: 16),
+            ],
+            if (visible.isEmpty)
+              Padding(
+                padding: EdgeInsets.only(
+                  top: MediaQuery.of(context).size.height * 0.14,
+                  left: 16,
+                  right: 16,
+                ),
+                child: Column(
+                  children: [
+                    SquircleIcon(
+                      size: 68,
+                      radius: 22,
+                      iconSize: 34,
+                      icon: Icons.menu_book_outlined,
+                      backgroundColor: cs.surfaceContainerHigh,
+                      iconColor: cs.onSurfaceVariant,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      s.coursesEmpty,
+                      textAlign: TextAlign.center,
+                      style: tt.bodyLarge?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              )
+            else ...[
+              for (int i = 0; i < visible.length; i++) ...[
+                _buildCourseCard(
+                  context: context,
+                  course: visible[i],
+                  pendingCount: app.allAssignments
+                      .where(
+                          (a) => a.courseId == visible[i].id && !a.isSubmitted)
+                      .length,
+                  cs: cs,
+                  tt: tt,
+                  s: s,
+                ),
+                if (i != visible.length - 1) const SizedBox(height: 12),
+              ],
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.touch_app_outlined,
+                    size: 14,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      s.tapCourseHint,
+                      textAlign: TextAlign.center,
+                      style: tt.labelSmall?.copyWith(
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.75),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGlanceCard({
+    required BuildContext context,
+    required ColorScheme cs,
+    required TextTheme tt,
+    required dynamic s,
+    required String insGpa,
+    required int courseCount,
+    required int totalPending,
+  }) {
+    final hasGpa = insGpa.isNotEmpty;
+    final numericGpa = double.tryParse(insGpa) != null;
+
+    return ExpressiveCard(
+      borderRadius: 24,
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          SquircleIcon(
+            size: 44,
+            radius: 14,
+            iconSize: 22,
+            icon: hasGpa ? Icons.auto_graph_rounded : Icons.school_rounded,
+            backgroundColor: cs.primaryFixed,
+            iconColor: cs.primary,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  hasGpa ? s.cumulativeGpaCaps : s.coursesSummaryLabel,
+                  style: tt.labelSmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      hasGpa ? insGpa : '$courseCount',
+                      style: tt.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (hasGpa && numericGpa) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        '/ 4.50',
+                        style: tt.labelMedium?.copyWith(
+                          color: cs.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ExpressivePill(
+            label: hasGpa
+                ? s.activeCoursesCount(courseCount)
+                : (totalPending > 0
+                    ? s.tasksDueCount(totalPending)
+                    : s.allCaughtUp),
+            backgroundColor: (!hasGpa && totalPending > 0)
+                ? cs.errorContainer
+                : cs.surfaceContainerHigh,
+            foregroundColor: (!hasGpa && totalPending > 0)
+                ? cs.onErrorContainer
+                : cs.onSurfaceVariant,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCourseCard({
+    required BuildContext context,
+    required Course course,
+    required int pendingCount,
+    required ColorScheme cs,
+    required TextTheme tt,
+    required dynamic s,
+  }) {
+    final (iconBg, iconFg, iconData) = _courseAccent(course, cs);
+
+    Color statusBg;
+    Color statusFg;
+    IconData statusIcon;
+    String statusText;
+
+    if (pendingCount >= 2) {
+      statusBg = cs.errorContainer;
+      statusFg = cs.onErrorContainer;
+      statusIcon = Icons.schedule_rounded;
+      statusText = s.tasksDueCount(pendingCount);
+    } else if (pendingCount == 1) {
+      statusBg = cs.tertiaryFixed;
+      statusFg = cs.onTertiaryFixed;
+      statusIcon = Icons.assignment_late_outlined;
+      statusText = s.tasksDueCount(1);
+    } else {
+      statusBg = cs.surfaceContainerHigh;
+      statusFg = cs.onSurfaceVariant;
+      statusIcon = Icons.check_circle_outline_rounded;
+      statusText = s.allCaughtUp;
+    }
+
+    return ExpressiveCard(
+      borderRadius: 24,
+      padding: const EdgeInsets.all(16),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CourseDetailScreen(course: course),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SquircleIcon(
+                size: 48,
+                radius: 16,
+                iconSize: 24,
+                icon: iconData,
+                backgroundColor: iconBg,
+                iconColor: iconFg,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            course.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: tt.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (course.overviewGrade != null &&
+                            course.overviewGrade!.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          ExpressivePill(
+                            label: course.overviewGrade!,
+                            backgroundColor: cs.surfaceContainerHigh,
+                            foregroundColor: cs.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      course.isCurrent
+                          ? 'ID: ${course.id}'
+                          : 'ID: ${course.id} • ${s.archiveTag}',
+                      style: tt.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: ExpressivePill(
+                    icon: statusIcon,
+                    label: statusText,
+                    backgroundColor: statusBg,
+                    foregroundColor: statusFg,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(999),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(999),
+                    onTap: () => launchUrl(
+                      Uri.parse(EclassService.syllabusUrl(course.id)),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            s.syllabus,
+                            style: tt.labelMedium?.copyWith(
+                              color: cs.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 16,
+                            color: cs.primary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

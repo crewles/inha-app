@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/models.dart';
 import '../../state/app_state.dart';
+import '../widgets/expressive_widgets.dart';
 
 class InsScreen extends StatefulWidget {
   const InsScreen({super.key});
@@ -13,6 +14,7 @@ class InsScreen extends StatefulWidget {
 
 class _InsScreenState extends State<InsScreen> {
   final _pwCtrl = TextEditingController();
+  bool _obscurePw = true;
   String _selectedSemester = '__ALL__';
 
   @override
@@ -28,108 +30,210 @@ class _InsScreenState extends State<InsScreen> {
     _pwCtrl.clear();
   }
 
+  (IconData icon, Color bg, Color fg) _subjectStyle(
+      InsCourseGrade c, ColorScheme cs) {
+    final code = c.courseNumber.toUpperCase();
+    if (code.startsWith('CSE') ||
+        code.startsWith('SOC') ||
+        code.startsWith('ICE') ||
+        code.startsWith('CIS')) {
+      return (Icons.terminal_rounded, cs.primaryFixed, cs.primary);
+    }
+    if (code.startsWith('MTH') ||
+        code.startsWith('MAT') ||
+        code.startsWith('STA')) {
+      return (Icons.functions_rounded, cs.surfaceContainerHigh, cs.onSurface);
+    }
+    if (code.startsWith('ENG') ||
+        code.startsWith('KOR') ||
+        code.startsWith('HUM')) {
+      return (Icons.edit_note_rounded, cs.secondaryFixed, cs.secondary);
+    }
+    if (code.startsWith('PHY') ||
+        code.startsWith('CHM') ||
+        code.startsWith('BIO')) {
+      return (Icons.science_outlined, cs.tertiaryFixed, cs.tertiary);
+    }
+    return (Icons.menu_book_rounded, cs.primaryFixed, cs.primary);
+  }
+
+  (Color bg, Color fg) _gradeBadgeColors(String grade, ColorScheme cs) {
+    final g = grade.trim().toUpperCase();
+    if (g.startsWith('A')) return (cs.secondaryFixed, cs.onSecondaryFixed);
+    if (g.startsWith('B')) return (cs.primaryFixed, cs.onPrimaryFixed);
+    if (g.startsWith('C')) return (cs.tertiaryFixed, cs.onTertiaryFixed);
+    if (g.startsWith('D') || g == 'F') {
+      return (cs.errorContainer, cs.onErrorContainer);
+    }
+    return (cs.surfaceContainerHigh, cs.onSurfaceVariant);
+  }
+
+  String? _gradePoints45(String grade) {
+    switch (grade.trim().toUpperCase()) {
+      case 'A+':
+        return '4.5';
+      case 'A0':
+      case 'A':
+        return '4.0';
+      case 'B+':
+        return '3.5';
+      case 'B0':
+      case 'B':
+        return '3.0';
+      case 'C+':
+        return '2.5';
+      case 'C0':
+      case 'C':
+        return '2.0';
+      case 'D+':
+        return '1.5';
+      case 'D0':
+      case 'D':
+        return '1.0';
+      case 'F':
+        return '0.0';
+      default:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     final s = app.s;
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     final hasPassword = (app.credentials?.insPassword ?? '').isNotEmpty;
     final data = app.insData;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('INS'),
-        actions: [
-          if (hasPassword)
-            app.isInsLoading
-                ? const Padding(
-                    padding: EdgeInsets.only(right: 16),
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : IconButton(
-                    tooltip: s.refresh,
-                    icon: const Icon(Icons.refresh_rounded),
-                    onPressed: () async {
-                      final ok = await app.syncIns();
-                      if (!ok && context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(s.insLoadError)),
-                        );
-                      }
-                    },
-                  ),
-        ],
+      appBar: ExpressiveAppBar(
+        title: s.insPortalTitle,
+        overline: s.portalHeader,
       ),
       body: !hasPassword
-          ? _buildPasswordPrompt(context, cs, s)
+          ? _buildPasswordPrompt(context, cs, tt, s)
           : data == null
               ? Center(
                   child: app.isInsLoading
                       ? const CircularProgressIndicator()
                       : Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.workspace_premium_outlined,
-                                  size: 64, color: cs.onSurfaceVariant),
-                              const SizedBox(height: 16),
-                              Text(s.insLoadError,
-                                  textAlign: TextAlign.center),
-                              const SizedBox(height: 16),
-                              FilledButton.icon(
-                                onPressed: () => app.syncIns(),
-                                icon: const Icon(Icons.refresh_rounded),
-                                label: Text(s.refresh),
-                              ),
-                            ],
+                          padding: const EdgeInsets.all(28),
+                          child: ExpressiveCard(
+                            borderRadius: 28,
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SquircleIcon(
+                                  size: 64,
+                                  radius: 20,
+                                  iconSize: 32,
+                                  icon: Icons.workspace_premium_outlined,
+                                  backgroundColor: cs.errorContainer,
+                                  iconColor: cs.onErrorContainer,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  s.insLoadError,
+                                  textAlign: TextAlign.center,
+                                  style: tt.bodyMedium,
+                                ),
+                                const SizedBox(height: 18),
+                                FilledButton.icon(
+                                  onPressed: () => app.syncIns(),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: cs.primary,
+                                    foregroundColor: cs.onPrimary,
+                                    shape: const StadiumBorder(),
+                                  ),
+                                  icon: const Icon(Icons.refresh_rounded),
+                                  label: Text(s.refresh),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                 )
-              : _buildGradesView(context, data, cs, s, app),
+              : _buildGradesView(context, data, cs, tt, s, app),
     );
   }
 
   Widget _buildPasswordPrompt(
-      BuildContext context, ColorScheme cs, dynamic s) {
+    BuildContext context,
+    ColorScheme cs,
+    TextTheme tt,
+    dynamic s,
+  ) {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
-        child: Card.filled(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          child: Padding(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: ExpressiveCard(
+            borderRadius: 28,
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(Icons.workspace_premium_rounded,
-                    size: 48, color: cs.primary),
-                const SizedBox(height: 14),
+                Center(
+                  child: SquircleIcon(
+                    size: 60,
+                    radius: 20,
+                    iconSize: 30,
+                    icon: Icons.workspace_premium_rounded,
+                    backgroundColor: cs.primaryFixed,
+                    iconColor: cs.primary,
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Text(
                   s.insNotConfigured,
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyLarge,
+                  style: tt.bodyLarge,
                 ),
                 const SizedBox(height: 18),
                 TextField(
                   controller: _pwCtrl,
-                  obscureText: true,
+                  obscureText: _obscurePw,
+                  onSubmitted: (_) => _saveAndLoad(),
                   decoration: InputDecoration(
-                    labelText: s.insPasswordOptional,
+                    hintText: s.insPasswordOptional,
                     prefixIcon: const Icon(Icons.key_outlined),
-                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePw
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                      onPressed: () =>
+                          setState(() => _obscurePw = !_obscurePw),
+                    ),
+                    filled: true,
+                    fillColor: cs.surfaceContainerLow,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(color: cs.primary, width: 2),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: _saveAndLoad,
-                  child: Text(s.saveInsPassword),
+                SizedBox(
+                  height: 50,
+                  child: FilledButton(
+                    onPressed: _saveAndLoad,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: cs.primary,
+                      foregroundColor: cs.onPrimary,
+                      shape: const StadiumBorder(),
+                    ),
+                    child: Text(s.saveInsPassword),
+                  ),
                 ),
               ],
             ),
@@ -143,6 +247,7 @@ class _InsScreenState extends State<InsScreen> {
     BuildContext context,
     InsGradeData data,
     ColorScheme cs,
+    TextTheme tt,
     dynamic s,
     AppState app,
   ) {
@@ -153,142 +258,501 @@ class _InsScreenState extends State<InsScreen> {
       }
     }
 
-    final visible = _selectedSemester == '__ALL__'
-        ? data.courses
-        : data.courses.where((c) => c.semester == _selectedSemester).toList();
+    final effectiveSemester =
+        semesters.contains(_selectedSemester) ? _selectedSemester : '__ALL__';
 
-    final gpa = data.gpaInfo['gpa'] ?? '—';
-    final credits =
-        '${data.gpaInfo['credits_acquired'] ?? '—'} / ${data.gpaInfo['credits_attempted'] ?? '—'}';
-    final rank = data.studentInfo['rank'];
+    final visible = effectiveSemester == '__ALL__'
+        ? data.courses
+        : data.courses.where((c) => c.semester == effectiveSemester).toList();
+
+    final gpa = (data.gpaInfo['gpa'] ?? '').trim();
+    final gpaDisplay = gpa.isEmpty ? '—' : gpa;
+    final hasNumericGpa = double.tryParse(gpa) != null;
+
+    final acq = (data.gpaInfo['credits_acquired'] ?? '').trim();
+    final att = (data.gpaInfo['credits_attempted'] ?? '').trim();
+    final rank = (data.studentInfo['rank'] ?? '').trim();
+
+    final rawName = (data.studentInfo['name'] ?? '').trim();
+    final studentId = (data.studentInfo['id'] ?? '').trim().isNotEmpty
+        ? data.studentInfo['id']!.trim()
+        : (app.credentials?.studentId ?? '');
+    final displayName = rawName.isNotEmpty ? rawName : studentId;
+    final dept = (data.studentInfo['dept'] ?? '').trim();
+    final gradeYear = (data.studentInfo['grade_year'] ?? '').trim();
+    final subParts = <String>[
+      if (studentId.isNotEmpty && studentId != displayName) studentId,
+      if (dept.isNotEmpty) dept,
+      if (gradeYear.isNotEmpty) s.yearLabel(gradeYear),
+    ];
+
+    final relSync = formatRelativeTime(data.updatedAt, s);
 
     return RefreshIndicator(
-      onRefresh: () => app.syncIns(),
+      onRefresh: () async {
+        final ok = await app.syncIns();
+        if (!ok && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(s.insLoadError)),
+          );
+        }
+      },
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
         children: [
-          Card(
-            color: cs.primaryContainer,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if ((data.studentInfo['name'] ?? '').isNotEmpty)
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      '${data.studentInfo['name']} • ${data.studentInfo['dept'] ?? ''}',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: cs.onPrimaryContainer,
-                          ),
+                      s.insPortalTitle,
+                      style: tt.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: cs.secondary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            s.insSyncSub,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: tt.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (relSync.isNotEmpty) ...[
+                ExpressivePill(
+                  label: s.syncUpdatedAgo(relSync),
+                  backgroundColor: cs.surfaceContainer,
+                  foregroundColor: cs.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+              ],
+              CircleActionButton(
+                icon: Icons.sync_rounded,
+                tooltip: s.refresh,
+                loading: app.isInsLoading,
+                backgroundColor: cs.surfaceContainer,
+                iconColor: cs.primary,
+                onPressed: () async {
+                  final ok = await app.syncIns();
+                  if (!ok && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(s.insLoadError)),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          HeroGradientCard(
+            borderRadius: 28,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    InitialsAvatar(
+                      name: displayName,
+                      size: 44,
+                      backgroundColor: Colors.white.withValues(alpha: 0.2),
+                      foregroundColor: Colors.white,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: tt.titleMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          if (subParts.isNotEmpty)
+                            Text(
+                              subParts.join(' • '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: tt.bodySmall?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.85),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Row(
                     children: [
-                      _metric(context, s.gpaLabel, gpa, cs.onPrimaryContainer),
-                      _metric(context, s.creditsLabel, credits,
-                          cs.onPrimaryContainer),
-                      if (rank != null && rank.isNotEmpty)
-                        _metric(
-                            context, s.rankLabel, rank, cs.onPrimaryContainer),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text(
+                              s.gpaLabel.toUpperCase(),
+                              style: tt.labelSmall?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.85),
+                                letterSpacing: 0.7,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text(
+                                  gpaDisplay,
+                                  style: tt.headlineSmall?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                if (hasNumericGpa)
+                                  Text(
+                                    ' / 4.5',
+                                    style: tt.labelSmall?.copyWith(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.85),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              s.cumulativeLabel,
+                              style: tt.labelSmall?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.85),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                s.creditsLabel.toUpperCase(),
+                                style: tt.labelSmall?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  letterSpacing: 0.7,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.baseline,
+                                textBaseline: TextBaseline.alphabetic,
+                                children: [
+                                  Text(
+                                    acq.isEmpty ? '—' : acq,
+                                    style: tt.titleLarge?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  if (att.isNotEmpty)
+                                    Text(
+                                      ' / $att',
+                                      style: tt.labelSmall?.copyWith(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.85),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (rank.isNotEmpty)
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Text(
+                                s.rankLabel.toUpperCase(),
+                                style: tt.labelSmall?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  letterSpacing: 0.7,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                rank,
+                                textAlign: TextAlign.center,
+                                style: tt.titleLarge?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           if (semesters.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            SizedBox(
-              height: 40,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  s.academicSemesters,
+                  style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  s.termsCount(semesters.length),
+                  style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
                 children: [
-                  FilterChip(
-                    label: Text(s.allSemesters),
-                    selected: _selectedSemester == '__ALL__',
-                    onSelected: (_) =>
-                        setState(() => _selectedSemester = '__ALL__'),
+                  _semesterChip(
+                    id: '__ALL__',
+                    label: s.allSemesters,
+                    selected: effectiveSemester == '__ALL__',
+                    cs: cs,
+                    tt: tt,
                   ),
                   const SizedBox(width: 8),
-                  ...semesters.map((sem) => Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: FilterChip(
-                          label: Text(sem),
-                          selected: _selectedSemester == sem,
-                          onSelected: (_) =>
-                              setState(() => _selectedSemester = sem),
-                        ),
-                      )),
+                  for (final sem in semesters) ...[
+                    _semesterChip(
+                      id: sem,
+                      label: sem,
+                      selected: effectiveSemester == sem,
+                      cs: cs,
+                      tt: tt,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                 ],
               ),
             ),
           ],
-          const SizedBox(height: 12),
-          ...visible.map((c) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Card.filled(
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
-                  child: ListTile(
-                    title: Text(
-                      c.title.isNotEmpty ? c.title : c.courseNumber,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text(
-                      [
-                        if (c.courseNumber.isNotEmpty) c.courseNumber,
-                        if (c.credit.isNotEmpty) '${c.credit} cr',
-                        if (c.semester.isNotEmpty) c.semester,
-                      ].join(' • '),
-                    ),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _gradeColor(c.grade, cs),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        c.grade,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
+          const SizedBox(height: 18),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                s.enrolledCourses(visible.length),
+                style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              Text(
+                s.letterGrading,
+                style: tt.labelSmall?.copyWith(
+                  color: cs.primary,
+                  fontWeight: FontWeight.w600,
                 ),
-              )),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          for (int i = 0; i < visible.length; i++) ...[
+            _buildCourseGradeCard(
+              c: visible[i],
+              showSemester: effectiveSemester == '__ALL__',
+              cs: cs,
+              tt: tt,
+              s: s,
+            ),
+            if (i != visible.length - 1) const SizedBox(height: 10),
+          ],
         ],
       ),
     );
   }
 
-  Widget _metric(BuildContext context, String label, String val, Color fg) {
-    return Column(
-      children: [
-        Text(
-          val,
-          style: Theme.of(context)
-              .textTheme
-              .headlineSmall
-              ?.copyWith(fontWeight: FontWeight.bold, color: fg),
+  Widget _semesterChip({
+    required String id,
+    required String label,
+    required bool selected,
+    required ColorScheme cs,
+    required TextTheme tt,
+  }) {
+    return Material(
+      color: selected ? cs.primary : cs.surfaceContainer,
+      shape: const StadiumBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => setState(() => _selectedSemester = id),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (selected) ...[
+                Icon(Icons.check_rounded, size: 15, color: cs.onPrimary),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: tt.labelMedium?.copyWith(
+                  color: selected ? cs.onPrimary : cs.onSurfaceVariant,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         ),
-        Text(label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(color: fg)),
-      ],
+      ),
     );
   }
 
-  Color _gradeColor(String grade, ColorScheme cs) {
-    final g = grade.toUpperCase();
-    if (g.startsWith('A')) return Colors.green.shade700;
-    if (g.startsWith('B')) return Colors.blue.shade700;
-    if (g.startsWith('C')) return Colors.orange.shade700;
-    if (g.startsWith('D') || g == 'F') return cs.error;
-    return cs.secondary;
+  Widget _buildCourseGradeCard({
+    required InsCourseGrade c,
+    required bool showSemester,
+    required ColorScheme cs,
+    required TextTheme tt,
+    required dynamic s,
+  }) {
+    final (icon, iconBg, iconFg) = _subjectStyle(c, cs);
+    final (badgeBg, badgeFg) = _gradeBadgeColors(c.grade, cs);
+    final pts = _gradePoints45(c.grade);
+
+    final metaParts = <String>[
+      if (c.courseNumber.isNotEmpty) c.courseNumber,
+      if (c.credit.isNotEmpty) '${c.credit} cr',
+      if (c.courseType.isNotEmpty) c.courseType,
+    ];
+
+    return ExpressiveCard(
+      borderRadius: 20,
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SquircleIcon(
+            size: 48,
+            radius: 16,
+            iconSize: 22,
+            icon: icon,
+            backgroundColor: iconBg,
+            iconColor: iconFg,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  c.title.isNotEmpty ? c.title : c.courseNumber,
+                  style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                if (metaParts.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    metaParts.join(' • '),
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ],
+                if (c.professor.isNotEmpty ||
+                    (showSemester && c.semester.isNotEmpty)) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (showSemester && c.semester.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainer,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            c.semester,
+                            style: tt.labelSmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      if (c.professor.isNotEmpty)
+                        Text(
+                          c.professor,
+                          style: tt.labelSmall?.copyWith(
+                            color: cs.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              ExpressivePill(
+                label: c.grade,
+                backgroundColor: badgeBg,
+                foregroundColor: badgeFg,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+              if (pts != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  s.ptsLabel(pts),
+                  style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }

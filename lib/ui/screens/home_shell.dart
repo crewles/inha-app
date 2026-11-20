@@ -29,39 +29,50 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<AppState>().s;
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       body: IndexedStack(index: _index, children: _pages),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.menu_book_outlined),
-            selectedIcon: const Icon(Icons.menu_book_rounded),
-            label: s.navCourses,
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              color: cs.outlineVariant.withValues(alpha: 0.35),
+              width: 1,
+            ),
           ),
-          NavigationDestination(
-            icon: const Icon(Icons.assignment_outlined),
-            selectedIcon: const Icon(Icons.assignment_rounded),
-            label: s.navAssignments,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.calendar_month_outlined),
-            selectedIcon: const Icon(Icons.calendar_month_rounded),
-            label: s.navTimetable,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.workspace_premium_outlined),
-            selectedIcon: const Icon(Icons.workspace_premium_rounded),
-            label: s.navIns,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.settings_outlined),
-            selectedIcon: const Icon(Icons.settings_rounded),
-            label: s.navSettings,
-          ),
-        ],
+        ),
+        child: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: (i) => setState(() => _index = i),
+          destinations: [
+            NavigationDestination(
+              icon: const Icon(Icons.school_outlined),
+              selectedIcon: const Icon(Icons.school_rounded),
+              label: s.navCourses,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.assignment_outlined),
+              selectedIcon: const Icon(Icons.assignment_rounded),
+              label: s.navAssignments,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.calendar_today_outlined),
+              selectedIcon: const Icon(Icons.calendar_today_rounded),
+              label: s.navTimetable,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.analytics_outlined),
+              selectedIcon: const Icon(Icons.analytics_rounded),
+              label: s.navIns,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.settings_outlined),
+              selectedIcon: const Icon(Icons.settings_rounded),
+              label: s.navSettings,
+            ),
+          ],
+        ),
       ),
     );
   }

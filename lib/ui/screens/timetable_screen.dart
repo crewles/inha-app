@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/models.dart';
 import '../../services/timetable_service.dart';
 import '../../state/app_state.dart';
+import '../widgets/expressive_widgets.dart';
 
 class TimetableScreen extends StatefulWidget {
   const TimetableScreen({super.key});
@@ -35,47 +36,77 @@ class _TimetableScreenState extends State<TimetableScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) {
-          final filtered = updatedClasses
-              .where((c) => c.toLowerCase().contains(query.toLowerCase()))
-              .toList();
-          return DraggableScrollableSheet(
-            expand: false,
-            initialChildSize: 0.7,
-            maxChildSize: 0.9,
-            builder: (_, scrollCtrl) => Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: TextField(
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      hintText: app.s.searchGroup,
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      border: const OutlineInputBorder(),
+      builder: (ctx) {
+        final sheetCs = Theme.of(ctx).colorScheme;
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final filtered = updatedClasses
+                .where((c) => c.toLowerCase().contains(query.toLowerCase()))
+                .toList();
+            return DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.7,
+              maxChildSize: 0.9,
+              builder: (_, scrollCtrl) => Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: TextField(
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: app.s.searchGroup,
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        filled: true,
+                        fillColor: sheetCs.surfaceContainerLow,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 14),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(999),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(999),
+                          borderSide:
+                              BorderSide(color: sheetCs.primary, width: 2),
+                        ),
+                      ),
+                      onChanged: (v) => setSheetState(() => query = v),
                     ),
-                    onChanged: (v) => setSheetState(() => query = v),
                   ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    controller: scrollCtrl,
-                    itemCount: filtered.length,
-                    itemBuilder: (_, i) => ListTile(
-                      title: Text(filtered[i]),
-                      trailing: filtered[i] == app.settings.timetableGroup
-                          ? const Icon(Icons.check_rounded)
-                          : null,
-                      onTap: () => Navigator.pop(ctx, filtered[i]),
+                  Expanded(
+                    child: ListView.builder(
+                      controller: scrollCtrl,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) {
+                        final isCurrent =
+                            filtered[i] == app.settings.timetableGroup;
+                        return ListTile(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          title: Text(
+                            filtered[i],
+                            style: TextStyle(
+                              fontWeight:
+                                  isCurrent ? FontWeight.w700 : FontWeight.w500,
+                            ),
+                          ),
+                          trailing: isCurrent
+                              ? Icon(Icons.check_circle_rounded,
+                                  color: sheetCs.primary)
+                              : null,
+                          onTap: () => Navigator.pop(ctx, filtered[i]),
+                        );
+                      },
                     ),
                   ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
 
     if (chosen != null) {
@@ -85,11 +116,20 @@ class _TimetableScreenState extends State<TimetableScreen> {
     }
   }
 
+  String _formattedSelectedDate(dynamic s) {
+    final now = TimetableService.nowTashkent();
+    final monday = now.subtract(Duration(days: now.weekday - 1));
+    final target = monday.add(Duration(days: _selectedDayIdx));
+    final monName = s.monthShortNames[target.month - 1];
+    return '$monName ${target.day}, ${target.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     final s = app.s;
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
 
     final group = app.settings.timetableGroup;
     final groupEntries = group.isEmpty
@@ -100,33 +140,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final next = TimetableService.findNextLesson(groupEntries);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(s.navTimetable),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: ActionChip(
-              avatar: const Icon(Icons.groups_rounded, size: 18),
-              label: Text(group.isEmpty ? s.selectGroup : group),
-              onPressed: () => _pickGroup(context, app),
-            ),
-          ),
-          if (app.isTimetableLoading)
-            const Padding(
-              padding: EdgeInsets.only(right: 16),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            )
-          else
-            IconButton(
-              tooltip: s.refresh,
-              icon: const Icon(Icons.refresh_rounded),
-              onPressed: () => app.syncTimetable(),
-            ),
-        ],
+      appBar: ExpressiveAppBar(
+        title: s.navTimetable,
+        overline: s.portalHeader,
       ),
       body: group.isEmpty
           ? Center(
@@ -135,17 +151,30 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.calendar_month_outlined,
-                        size: 64, color: cs.onSurfaceVariant),
-                    const SizedBox(height: 16),
+                    SquircleIcon(
+                      size: 72,
+                      radius: 24,
+                      iconSize: 36,
+                      icon: Icons.calendar_month_rounded,
+                      backgroundColor: cs.primaryFixed,
+                      iconColor: cs.primary,
+                    ),
+                    const SizedBox(height: 18),
                     Text(
                       s.noGroupSelected,
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyLarge,
+                      style: tt.bodyLarge?.copyWith(color: cs.onSurfaceVariant),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 22),
                     FilledButton.icon(
                       onPressed: () => _pickGroup(context, app),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: cs.primary,
+                        foregroundColor: cs.onPrimary,
+                        shape: const StadiumBorder(),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 14),
+                      ),
                       icon: const Icon(Icons.groups_rounded),
                       label: Text(s.selectGroup),
                     ),
@@ -156,42 +185,117 @@ class _TimetableScreenState extends State<TimetableScreen> {
           : RefreshIndicator(
               onRefresh: () => app.syncTimetable(),
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
                 children: [
-                  if (next != null) _buildNextLessonCard(context, next, cs, s),
-                  const SizedBox(height: 16),
-                  SegmentedButton<int>(
-                    showSelectedIcon: false,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Material(
+                          color: cs.surfaceContainerHigh,
+                          shape: const StadiumBorder(),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: () => _pickGroup(context, app),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 9),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.groups_rounded,
+                                      size: 18, color: cs.primary),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      group,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: tt.labelMedium?.copyWith(
+                                        color: cs.primary,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(Icons.arrow_drop_down_rounded,
+                                      size: 18, color: cs.onSurfaceVariant),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      CircleActionButton(
+                        icon: Icons.sync_rounded,
+                        tooltip: s.refresh,
+                        loading: app.isTimetableLoading,
+                        backgroundColor: cs.surfaceContainerHigh,
+                        onPressed: () => app.syncTimetable(),
+                      ),
+                    ],
+                  ),
+                  if (next != null) ...[
+                    const SizedBox(height: 14),
+                    _buildNextLessonCard(context, next, tt, s),
+                  ],
+                  const SizedBox(height: 18),
+                  ExpressiveSegmentedControl<int>(
                     segments: List.generate(
                       5,
-                      (i) => ButtonSegment(
-                        value: i,
-                        label: Text(s.dayLabels[i]),
-                      ),
+                      (i) => ExpressiveSegment(value: i, label: s.dayLabels[i]),
                     ),
-                    selected: {_selectedDayIdx},
-                    onSelectionChanged: (sel) =>
-                        setState(() => _selectedDayIdx = sel.first),
+                    selected: _selectedDayIdx,
+                    onChanged: (idx) => setState(() => _selectedDayIdx = idx),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          s.dayScheduleTitle(_selectedDayIdx),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: tt.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ExpressivePill(
+                        label: s.classesCount(dayEntries.length),
+                        backgroundColor: cs.surfaceContainerHigh,
+                        foregroundColor: cs.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      const Spacer(),
+                      Text(
+                        _formattedSelectedDate(s),
+                        style: tt.labelSmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
                   if (dayEntries.isEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 48),
                       child: Center(
                         child: Text(
                           s.noLessonsToday,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
+                          style: tt.titleMedium
                               ?.copyWith(color: cs.onSurfaceVariant),
                         ),
                       ),
                     )
                   else
-                    ...dayEntries.map((e) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _buildLessonCard(context, e, cs),
-                        )),
+                    for (int i = 0; i < dayEntries.length; i++) ...[
+                      _buildLessonRow(context, dayEntries[i], i, cs, tt),
+                      if (i != dayEntries.length - 1)
+                        const SizedBox(height: 12),
+                    ],
                 ],
               ),
             ),
@@ -201,167 +305,253 @@ class _TimetableScreenState extends State<TimetableScreen> {
   Widget _buildNextLessonCard(
     BuildContext context,
     (ScheduleEntry, String, int?) next,
-    ColorScheme cs,
+    TextTheme tt,
     dynamic s,
   ) {
     final (entry, dayCode, minsUntil) = next;
     String badge;
     if (minsUntil != null) {
-      final h = minsUntil ~/ 60;
-      final m = minsUntil % 60;
-      badge = h > 0 ? '${h}h ${m}m' : '${m}m';
+      badge = s.formatCountdown(minsUntil);
     } else {
       final idx = TimetableService.dayNames.indexOf(dayCode);
       badge = idx >= 0 ? s.dayLabels[idx] : dayCode;
     }
 
-    return Card(
-      color: cs.primaryContainer,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    return HeroGradientCard(
+      borderRadius: 28,
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.bolt_rounded,
+                        size: 15, color: Colors.white),
+                    const SizedBox(width: 4),
+                    Text(
+                      badge,
+                      style: tt.labelSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              Text(
+                s.nextLesson.toUpperCase(),
+                style: tt.labelSmall?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            entry.subject,
+            style: tt.titleLarge?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _heroBadge(
+                tt,
+                Icons.schedule_rounded,
+                '${entry.periodStart} – ${entry.periodEnd}',
+              ),
+              if (entry.classrooms.isNotEmpty)
+                _heroBadge(
+                  tt,
+                  Icons.location_on_outlined,
+                  entry.classrooms.join(', '),
+                ),
+            ],
+          ),
+          if (entry.teachers.isNotEmpty) ...[
+            const SizedBox(height: 12),
             Row(
               children: [
-                Icon(Icons.bolt_rounded, color: cs.onPrimaryContainer),
-                const SizedBox(width: 6),
-                Text(
-                  s.nextLesson,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: cs.onPrimaryContainer,
-                        fontWeight: FontWeight.bold,
-                      ),
+                InitialsAvatar(
+                  name: entry.teachers.first,
+                  size: 26,
+                  backgroundColor: Colors.white.withValues(alpha: 0.2),
+                  foregroundColor: Colors.white,
                 ),
-                const Spacer(),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: cs.primary,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                const SizedBox(width: 8),
+                Expanded(
                   child: Text(
-                    badge,
-                    style: TextStyle(
-                      color: cs.onPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                    entry.teachers.join(', '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: tt.labelMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            Text(
-              entry.subject,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: cs.onPrimaryContainer,
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '${entry.periodStart} – ${entry.periodEnd}  •  ${entry.classrooms.isEmpty ? "—" : entry.classrooms.join(", ")}',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: cs.onPrimaryContainer),
-            ),
           ],
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildLessonCard(
-      BuildContext context, ScheduleEntry e, ColorScheme cs) {
-    return Card.filled(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: cs.secondaryContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    e.periodStart,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: cs.onSecondaryContainer,
-                    ),
-                  ),
-                  Text(
-                    e.periodEnd,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: cs.onSecondaryContainer,
-                    ),
-                  ),
-                ],
-              ),
+  Widget _heroBadge(TextTheme tt, IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.white),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: tt.labelSmall?.copyWith(color: Colors.white),
             ),
-            const SizedBox(width: 14),
-            Expanded(
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLessonRow(
+    BuildContext context,
+    ScheduleEntry e,
+    int index,
+    ColorScheme cs,
+    TextTheme tt,
+  ) {
+    final isFirst = index == 0;
+    final timeBg = isFirst ? cs.surfaceContainerHigh : cs.surfaceContainer;
+    final startColor = isFirst ? cs.primary : cs.onSurface;
+    final roomBg =
+        isFirst ? cs.surfaceContainer : cs.secondaryFixed;
+    final roomFg =
+        isFirst ? cs.primary : cs.onSecondaryFixed;
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            width: 76,
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+            decoration: BoxDecoration(
+              color: timeBg,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  e.periodStart,
+                  style: tt.titleSmall?.copyWith(
+                    color: startColor,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Container(
+                  width: 16,
+                  height: 2,
+                  margin: const EdgeInsets.symmetric(vertical: 5),
+                  decoration: BoxDecoration(
+                    color: startColor.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                Text(
+                  e.periodEnd,
+                  style: tt.labelSmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ExpressiveCard(
+              borderRadius: 20,
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    e.subject,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w600),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          e.subject,
+                          style: tt.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if (e.classrooms.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        ExpressivePill(
+                          label: e.classrooms.join(', '),
+                          backgroundColor: roomBg,
+                          foregroundColor: roomFg,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ],
+                    ],
                   ),
                   if (e.teachers.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 10),
                     Row(
                       children: [
-                        Icon(Icons.person_outline_rounded,
-                            size: 16, color: cs.onSurfaceVariant),
+                        Icon(
+                          Icons.person_outline_rounded,
+                          size: 16,
+                          color: isFirst ? cs.primary : cs.secondary,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             e.teachers.join(', '),
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: cs.onSurfaceVariant),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: tt.labelSmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ],
-                  if (e.classrooms.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.meeting_room_outlined,
-                            size: 16, color: cs.onSurfaceVariant),
-                        const SizedBox(width: 6),
-                        Text(
-                          e.classrooms.join(', '),
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: cs.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                  ],
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

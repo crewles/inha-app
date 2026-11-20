@@ -7,6 +7,11 @@ class S {
   String get appTitle => 'Inha App';
   String get appSubtitle =>
       isRu ? 'eClass • INS • Расписание' : 'eClass • INS • Timetable';
+  String get portalHeader => 'IUT PORTAL';
+  String get campusFooter => isRu
+      ? 'Inha University in Tashkent • Локальный SQLite'
+      : 'Inha University in Tashkent • Local SQLite';
+  String get appVersion => 'v1.0.1';
 
   // Navigation
   String get navCourses => isRu ? 'Курсы' : 'Courses';
@@ -20,8 +25,23 @@ class S {
   String get loginSubtitle => isRu
       ? 'Все данные хранятся локально в SQLite на вашем телефоне'
       : 'All data is stored locally in SQLite on your device';
+  String get loginTagline => isRu
+      ? 'Ваши курсы, оценки и расписание в одном месте'
+      : 'Your classes, grades, and schedule in one place';
   String get studentId =>
       isRu ? 'Student ID (например U2210001)' : 'Student ID (e.g. U2210001)';
+  String get studentIdLabel => 'Student ID';
+  String get portalIdTag => 'Portal ID';
+  String get requiredTag => isRu ? 'Обязательно' : 'Required';
+  String get autoSyncTag => 'Auto-Sync';
+  String get insSyncHelper => isRu
+      ? 'Для автоматической синхронизации оценок и транскрипта'
+      : 'For automatic grade and transcript sync';
+  String get enterStudentIdHint => 'U2210001';
+  String get enterEclassPasswordHint =>
+      isRu ? 'Введите пароль eClass' : 'Enter eClass password';
+  String get enterInsPasswordHint =>
+      isRu ? 'Введите пароль INS' : 'Enter INS password';
   String get eclassPassword => isRu ? 'Пароль eClass' : 'eClass Password';
   String get insPasswordOptional =>
       isRu ? 'Пароль INS (необязательно)' : 'INS Password (optional)';
@@ -38,6 +58,30 @@ class S {
       : 'No courses found. Pull down to refresh.';
   String get currentSemester => isRu ? 'Текущий' : 'Current';
   String get allCourses => isRu ? 'Все курсы' : 'All courses';
+  String get welcomeBack => isRu ? 'С возвращением' : 'Welcome back';
+  String helloUser(String name) => isRu ? 'Привет, $name 👋' : 'Hello, $name 👋';
+  String yearLabel(String yr) => isRu ? '$yr курс' : 'Year $yr';
+  String get cumulativeGpaCaps => isRu ? 'ОБЩИЙ GPA (INS)' : 'CUMULATIVE GPA';
+  String get coursesSummaryLabel => isRu ? 'АКТИВНЫЕ КУРСЫ' : 'ACTIVE COURSES';
+  String activeCoursesCount(int n) =>
+      isRu ? '$n активн.' : '$n Active';
+  String tasksDueCount(int n) {
+    if (!isRu) return n == 1 ? '1 task due' : '$n tasks due';
+    final mod100 = n % 100;
+    final mod10 = n % 10;
+    if (mod10 == 1 && mod100 != 11) return '$n задание';
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+      return '$n задания';
+    }
+    return '$n заданий';
+  }
+
+  String get allCaughtUp => isRu ? 'Всё сдано ✓' : 'All caught up ✓';
+  String get tapCourseHint => isRu
+      ? 'Нажмите на курс, чтобы открыть материалы и задания'
+      : 'Tap any card to view lecture slides & assignments';
+  String get archiveTag => isRu ? 'Архив' : 'Archive';
+
   String get tabAssignments => isRu ? 'Задания' : 'Assignments';
   String get tabGrades => isRu ? 'Оценки' : 'Grades';
   String get tabAttendance => isRu ? 'Посещаемость' : 'Attendance';
@@ -47,11 +91,54 @@ class S {
   String get refresh => isRu ? 'Обновить' : 'Refresh';
   String get offlineCache => isRu ? 'Локальная база SQLite' : 'Local SQLite DB';
 
+  String get courseDetailTitle => isRu ? 'О курсе' : 'Course Detail';
+  String get attendanceRecord => isRu ? 'Посещаемость' : 'Attendance Record';
+  String get attendanceThreshold => isRu
+      ? 'Минимум 80% для допуска к экзамену'
+      : 'Threshold minimum: 80% to sit final';
+  String get statusSafe => isRu ? 'Статус: В норме' : 'Status: Safe';
+  String get statusAtRisk => isRu ? 'Статус: Ниже 80%' : 'Status: Below 80%';
+  String get savedOffline => isRu ? 'Сохранено офлайн' : 'Saved offline';
+  String filesCount(int n) => isRu ? '$n файлов' : '$n Files';
+  String get courseMaterials => isRu ? 'Материалы курса' : 'Course Materials';
+  String get submitWork => isRu ? 'Сдать файл' : 'Submit work';
+
   // Assignments
   String get filterAll => isRu ? 'Все' : 'All';
   String get filterPending => isRu ? 'Несданные' : 'Pending';
   String get filterSubmitted => isRu ? 'Сданные' : 'Submitted';
+  String get filterGraded => isRu ? 'С оценкой' : 'Graded';
   String get noAssignments => isRu ? 'Заданий нет' : 'No assignments';
+  String assignmentsAttention(int n) {
+    if (n == 0) {
+      return isRu
+          ? 'Все текущие задания сданы'
+          : 'All current assignments submitted';
+    }
+    return isRu
+        ? '${tasksDueCount(n)} требуют внимания'
+        : '$n ${n == 1 ? "task needs" : "tasks need"} your attention';
+  }
+
+  String get completionPace => isRu ? 'Прогресс сдачи' : 'Completion Pace';
+  String percentFinished(int pct) =>
+      isRu ? '$pct% выполнено' : '$pct% Finished';
+  String completedOf(int done, int total) =>
+      isRu ? '$done из $total сдано' : '$done of $total completed';
+  String dueIn7Days(int n) =>
+      isRu ? '$n в ближайшие 7 дн.' : '$n due in 7 days';
+  String get allCaughtUpTitle =>
+      isRu ? 'Всё выполнено!' : 'All caught up!';
+  String get allCaughtUpBody => isRu
+      ? 'В этой категории нет заданий. Отличная работа!'
+      : 'No assignments found in this category.';
+  String get noSubmissionYet =>
+      isRu ? 'Файл ещё не отправлен' : 'No submission yet';
+  String get openInEclass => isRu ? 'Открыть в eClass' : 'Open in eClass';
+  String get overdueLabel => isRu ? 'Просрочено' : 'Overdue';
+  String get dueSoonLabel => isRu ? 'Скоро дедлайн' : 'Urgent';
+  String get submitSolution => isRu ? 'Сдать файл' : 'Submit Solution';
+
   String get dueLabel => isRu ? 'Срок' : 'Due';
   String get submitted => isRu ? 'Сдано' : 'Submitted';
   String get notSubmitted => isRu ? 'Не сдано' : 'Pending';
@@ -71,7 +158,7 @@ class S {
   String get absent => isRu ? 'Пропуск' : 'Absent';
   String get lateLabel => isRu ? 'Опоздание' : 'Late';
   String get others => isRu ? 'Другое' : 'Others';
-  String get recentSessions => isRu ? 'История занятий' : 'Session History';
+  String get recentSessions => isRu ? 'История занятий' : 'Recent Sessions';
 
   // Timetable
   String get selectGroup => isRu ? 'Выбрать группу' : 'Select group';
@@ -83,6 +170,61 @@ class S {
   String get noLessonsToday => isRu ? 'Пар нет' : 'No classes';
   List<String> get dayLabels =>
       isRu ? ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  List<String> get dayFullNames => isRu
+      ? ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница']
+      : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  String dayScheduleTitle(int idx) => isRu
+      ? 'Расписание • ${dayFullNames[idx]}'
+      : '${dayFullNames[idx]} Schedule';
+  String classesCount(int n) {
+    if (!isRu) return n == 1 ? '1 Class' : '$n Classes';
+    final mod100 = n % 100;
+    final mod10 = n % 10;
+    if (mod10 == 1 && mod100 != 11) return '$n пара';
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+      return '$n пары';
+    }
+    return '$n пар';
+  }
+
+  List<String> get monthShortNames => isRu
+      ? const [
+          'янв',
+          'фев',
+          'мар',
+          'апр',
+          'май',
+          'июн',
+          'июл',
+          'авг',
+          'сен',
+          'окт',
+          'ноя',
+          'дек',
+        ]
+      : const [
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
+        ];
+
+  String formatCountdown(int mins) {
+    final h = mins ~/ 60;
+    final m = mins % 60;
+    if (isRu) {
+      return h > 0 ? 'через $h ч $m мин' : 'через $m мин';
+    }
+    return h > 0 ? 'in ${h}h ${m}m' : 'in $m min';
+  }
 
   // INS
   String get insNotConfigured => isRu
@@ -92,10 +234,28 @@ class S {
   String get gpaLabel => 'GPA';
   String get creditsLabel => isRu ? 'Кредиты' : 'Credits';
   String get rankLabel => isRu ? 'Ранг' : 'Rank';
-  String get allSemesters => isRu ? 'Все семестры' : 'All semesters';
+  String get allSemesters => isRu ? 'Все семестры' : 'All Semesters';
   String get insLoadError => isRu
       ? 'Не удалось загрузить данные INS. Проверьте пароль и интернет.'
       : 'Failed to load INS data. Check password and network.';
+  String get insPortalTitle => isRu ? 'Портал INS' : 'INS Portal';
+  String get insSyncSub => isRu
+      ? 'Прямое подключение к ins.inha.uz'
+      : 'Direct ins.inha.uz connection';
+  String syncUpdatedAgo(String rel) =>
+      isRu ? 'Обновлено: $rel' : 'Sync: $rel';
+  String get justNow => isRu ? 'только что' : 'just now';
+  String minutesAgo(int m) => isRu ? '$m мин назад' : '${m}m ago';
+  String hoursAgo(int h) => isRu ? '$h ч назад' : '${h}h ago';
+  String daysAgo(int d) => isRu ? '$d д назад' : '${d}d ago';
+  String get cumulativeLabel => isRu ? 'Общий' : 'Cumulative';
+  String get academicSemesters =>
+      isRu ? 'Учебные семестры' : 'Academic Semesters';
+  String termsCount(int n) => isRu ? '$n сем.' : '$n Terms';
+  String enrolledCourses(int n) =>
+      isRu ? 'Предметы ($n)' : 'Courses ($n)';
+  String get letterGrading => isRu ? 'Буквенные оценки' : 'Letter Grading';
+  String ptsLabel(String pts) => isRu ? '$pts б.' : '$pts pts';
 
   // Settings
   String get accountSection => isRu ? 'Аккаунт' : 'Account';
@@ -118,8 +278,9 @@ class S {
   String get notifyTimetable =>
       isRu ? 'Напоминания о парах (офлайн)' : 'Class reminders (offline)';
   String get reminderOffset => isRu ? 'За сколько до пары' : 'Before class';
-  String get bgSyncLabel =>
-      isRu ? 'Фоновая проверка eClass (WorkManager)' : 'Background eClass sync (WorkManager)';
+  String get bgSyncLabel => isRu
+      ? 'Фоновая проверка eClass (WorkManager)'
+      : 'Background eClass sync (WorkManager)';
   String get bgSyncSub => isRu
       ? 'Проверяет новые задания через JSON API в фоне'
       : 'Checks new assignments via JSON API in background';
@@ -138,4 +299,53 @@ class S {
   String get cancel => isRu ? 'Отмена' : 'Cancel';
   String get confirm => isRu ? 'Подтвердить' : 'Confirm';
   String get save => isRu ? 'Сохранить' : 'Save';
+
+  String get preferencesOverline => isRu ? 'ПАРАМЕТРЫ' : 'PREFERENCES';
+  String get settingsSubtitle => isRu
+      ? 'Оформление, уведомления и синхронизация'
+      : 'Preferences, notifications & sync';
+  String get connectedBadge => isRu ? 'Подключён' : 'Connected';
+  String get notSetBadge => isRu ? 'Не задан' : 'Not set';
+  String get updateInsSub =>
+      isRu ? 'Синхронизация оценок и транскрипта' : 'Portal credentials sync';
+  String get themeModeTitle => isRu ? 'Режим темы' : 'Theme Mode';
+  String get matchWallpaperTitle =>
+      isRu ? 'Цвета обоев (Material You)' : 'Match wallpaper colors';
+  String get matchWallpaperSub => isRu
+      ? 'Адаптирует акценты под системные обои Android'
+      : 'Derives expressive dynamic accents from system wallpaper';
+  String get displayLanguageTitle => isRu ? 'Язык интерфейса' : 'Display Language';
+  String get displayLanguageSub =>
+      isRu ? 'Локализация приложения' : 'Portal localized interface';
+  String get deadlineRemindersTitle =>
+      isRu ? 'Напоминания о дедлайнах' : 'Deadline reminders';
+  String get deadlineRemindersSub => isRu
+      ? 'За 24ч и 2ч до срока сдачи задания'
+      : '24h & 2h before assignment due date';
+  String get classRemindersTitle =>
+      isRu ? 'Напоминания о парах' : 'Class reminders';
+  String classRemindersBefore(int m) => isRu
+      ? 'За $m мин до начала пары (офлайн)'
+      : '$m min before lecture starts (offline)';
+  String get autoCheckTasksTitle =>
+      isRu ? 'Фоновая проверка заданий' : 'Auto-check new tasks';
+  String get autoCheckTasksSub => isRu
+      ? 'Периодическая синхронизация WorkManager'
+      : 'Background sync frequency (WorkManager)';
+  String get refreshAllNow =>
+      isRu ? 'Обновить все данные сейчас' : 'Refresh all data now';
+  String get dataPrivacySection =>
+      isRu ? 'Данные и хранилище' : 'Data & Storage';
+  String get clearOfflineCacheTitle =>
+      isRu ? 'Очистить офлайн-кэш' : 'Clear offline cache';
+  String offlineCacheSub(String sizeText) => isRu
+      ? '$sizeText скачанных файлов и кэш SQLite'
+      : '$sizeText of downloaded files & SQLite cache';
+  String get logoutPortal =>
+      isRu ? 'Выйти из аккаунта' : 'Log out of Inha Portal';
+  String get appVersionFooter =>
+      'Inha App v1.0.1 • Tashkent Campus';
+  String get localStorageFooter => isRu
+      ? 'Локальное хранилище SQLite • Прямое подключение к eClass & INS'
+      : 'Local SQLite Storage • Direct eClass & INS Client';
 }
