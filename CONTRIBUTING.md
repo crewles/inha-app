@@ -11,7 +11,7 @@
 
 Требования:
 - **Flutter** (channel `stable`, Dart SDK `^3.5.0`)
-- **JDK 17** и **Android SDK** (`compileSdk 36`, `minSdk 24`)
+- **JDK 21** и **Android SDK** (`compileSdk 36`, `minSdk 24`)
 
 Базовые команды:
 ```bash
