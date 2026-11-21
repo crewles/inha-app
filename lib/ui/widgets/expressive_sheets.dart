@@ -378,41 +378,23 @@ class _UpdateAvailableSheetBody extends StatefulWidget {
 }
 
 class _UpdateAvailableSheetBodyState extends State<_UpdateAvailableSheetBody> {
-  final UpdateService _updater = UpdateService();
-  bool _downloading = false;
-  double _progress = 0;
+  final bool _downloading = false;
+  final double _progress = 0;
   String? _error;
 
   Future<void> _downloadAndInstall() async {
-    final s = context.read<AppState>().s;
     AppHaptics.medium();
-    setState(() {
-      _downloading = true;
-      _progress = 0;
-      _error = null;
-    });
+    final url = widget.release.apkUrl ?? widget.release.htmlUrl;
     try {
-      final path = await _updater.downloadApk(
-        widget.release,
-        onProgress: (received, total) {
-          if (mounted && total > 0) {
-            setState(() => _progress = (received / total).clamp(0.0, 1.0));
-          }
-        },
+      await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
       );
       if (!mounted) return;
-      setState(() => _downloading = false);
-      final started = await UpdateService.installApk(path);
-      if (!mounted) return;
-      if (!started) {
-        showQuickToast(context, s.installPermissionPrompt);
-      } else {
-        Navigator.pop(context);
-      }
+      Navigator.pop(context);
     } catch (e) {
       if (mounted) {
         setState(() {
-          _downloading = false;
           _error = e.toString();
         });
       }

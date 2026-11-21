@@ -508,8 +508,12 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                 ],
                 const SizedBox(height: 14),
                 AnimatedBuilder(
-                  animation: _tabController,
+                  animation: _tabController.animation ?? _tabController,
                   builder: (context, _) {
+                    final animVal = _tabController.animation?.value ??
+                        _tabController.index.toDouble();
+                    final activeIdx =
+                        animVal.round().clamp(0, tabs.length - 1);
                     return Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
@@ -527,7 +531,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: List.generate(tabs.length, (i) {
-                                  final selected = _tabController.index == i;
+                                  final selected = activeIdx == i;
                                   final (tabIcon, tabLabel) = tabs[i];
                                   return Material(
                                     color: Colors.transparent,
@@ -541,7 +545,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                                       borderRadius: BorderRadius.circular(999),
                                       child: AnimatedContainer(
                                         duration:
-                                            const Duration(milliseconds: 180),
+                                            const Duration(milliseconds: 100),
+                                        curve: Curves.easeOutCubic,
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 7, vertical: 8),
                                         decoration: BoxDecoration(

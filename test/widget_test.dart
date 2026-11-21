@@ -1119,6 +1119,6 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('Check for updates'), findsOneWidget);
-    expect(find.text('Current version v1.1.0 • GitHub Releases'), findsOneWidget);
+    expect(find.text('Current version v1.1.1 • GitHub Releases'), findsOneWidget);
   });
 }

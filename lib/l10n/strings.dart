@@ -83,6 +83,7 @@ class S {
       ? 'Нажмите на курс, чтобы открыть материалы и задания'
       : 'Tap any card to view lecture slides & assignments';
   String get archiveTag => isRu ? 'Архив' : 'Archive';
+  String get currentCourseTag => isRu ? 'Активный курс' : 'Active Course';
 
   String get tabAssignments => isRu ? 'Задания' : 'Assignments';
   String get tabGrades => isRu ? 'Оценки' : 'Grades';

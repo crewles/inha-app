@@ -15,20 +15,30 @@ import 'course_detail_screen.dart';
 class CoursesScreen extends StatelessWidget {
   const CoursesScreen({super.key});
 
-  (Color bg, Color fg, IconData icon) _courseAccent(
-      Course course, ColorScheme cs) {
-    if (!course.isCurrent) {
-      return (cs.surfaceContainerHigh, cs.onSurfaceVariant, Icons.book_rounded);
+  String _courseBadgeCode(Course course) {
+    final codeMatch =
+        RegExp(r'\b([A-Z]{2,4}\s?\d{3,4}[A-Z]?)\b').firstMatch(course.name);
+    if (codeMatch != null) {
+      return codeMatch.group(1)!.replaceAll(' ', '');
     }
-    const icons = [
-      Icons.terminal_rounded,
-      Icons.memory_rounded,
-      Icons.hub_rounded,
-      Icons.layers_rounded,
-      Icons.menu_book_rounded,
-    ];
-    final icon = icons[course.id.hashCode.abs() % icons.length];
-    return (cs.primaryFixed, cs.onPrimaryFixed, icon);
+    const stopWords = {'and', 'of', 'the', 'in', 'to', 'for', 'with'};
+    final tokens = course.name
+        .replaceAll(RegExp(r'[^\w\s]'), ' ')
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty && !stopWords.contains(w.toLowerCase()))
+        .toList();
+    if (tokens.isEmpty) return 'IUT';
+    final letters = StringBuffer();
+    String trailingNum = '';
+    for (final t in tokens) {
+      if (RegExp(r'^\d+$').hasMatch(t)) {
+        trailingNum = t;
+      } else if (letters.length < 4) {
+        letters.write(t[0].toUpperCase());
+      }
+    }
+    final base = letters.isEmpty ? 'IUT' : letters.toString();
+    return trailingNum.isEmpty ? base : '$base $trailingNum';
   }
 
   @override
@@ -361,31 +371,24 @@ class CoursesScreen extends StatelessWidget {
     required TextTheme tt,
     required dynamic s,
   }) {
-    final (iconBg, iconFg, iconData) = _courseAccent(course, cs);
+    final badgeCode = _courseBadgeCode(course);
     final professor = (schedule?.teacher.isNotEmpty == true)
         ? schedule!.teacher
         : course.professor.trim();
     final classroom = schedule?.classroomSummary ?? '';
     final slots = schedule?.scheduleSummary ?? '';
+    final firstSlot =
+        slots.isNotEmpty ? slots.split(',').first.trim() : '';
+    final hasGrade =
+        course.overviewGrade != null && course.overviewGrade!.trim().isNotEmpty;
 
-    Color statusBg;
-    Color statusFg;
-    IconData statusIcon;
-    String statusText;
-
-    if (pendingCount > 0) {
-      statusBg = cs.primaryFixed;
-      statusFg = cs.onPrimaryFixed;
-      statusIcon = pendingCount >= 2
-          ? Icons.schedule_rounded
-          : Icons.assignment_late_outlined;
-      statusText = s.tasksDueCount(pendingCount);
-    } else {
-      statusBg = cs.surfaceContainerHigh;
-      statusFg = cs.onSurfaceVariant;
-      statusIcon = Icons.check_circle_outline_rounded;
-      statusText = s.allCaughtUp;
-    }
+    final statusIcon = pendingCount > 0
+        ? Icons.assignment_outlined
+        : Icons.check_circle_outline_rounded;
+    final statusBase =
+        pendingCount > 0 ? s.tasksDueCount(pendingCount) : s.allCaughtUp;
+    final statusText =
+        firstSlot.isNotEmpty ? '$statusBase • $firstSlot' : statusBase;
 
     void openCourse({int tab = 0}) {
       AppHaptics.light();
@@ -396,198 +399,382 @@ class CoursesScreen extends StatelessWidget {
       );
     }
 
+    void openSyllabusUrl() {
+      AppHaptics.light();
+      launchUrl(
+        Uri.parse(EclassService.syllabusUrl(course.id)),
+        mode: LaunchMode.externalApplication,
+      );
+    }
+
     return ExpressiveCard(
       borderRadius: 24,
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.zero,
       onTap: () => openCourse(tab: 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Stack(
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SquircleIcon(
-                size: 48,
-                radius: 16,
-                iconSize: 24,
-                icon: iconData,
-                backgroundColor: iconBg,
-                iconColor: iconFg,
+          Positioned(
+            left: 0,
+            top: 14,
+            bottom: 14,
+            child: Container(
+              width: 5,
+              decoration: BoxDecoration(
+                color: course.isCurrent ? cs.primary : cs.outlineVariant,
+                borderRadius: const BorderRadius.horizontal(
+                  right: Radius.circular(6),
+                ),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 14, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. Top Metadata Row
+                Row(
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            course.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: tt.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        if (course.overviewGrade != null &&
-                            course.overviewGrade!.isNotEmpty) ...[
-                          const SizedBox(width: 8),
+                    Expanded(
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
                           ExpressivePill(
-                            label: course.overviewGrade!,
-                            backgroundColor: cs.surfaceContainerHigh,
-                            foregroundColor: cs.primary,
+                            label: badgeCode,
+                            backgroundColor: course.isCurrent
+                                ? cs.primaryFixed
+                                : cs.surfaceContainerHigh,
+                            foregroundColor: course.isCurrent
+                                ? cs.onPrimaryFixed
+                                : cs.onSurfaceVariant,
                             fontWeight: FontWeight.w700,
-                            onTap: () => openCourse(tab: 1),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 11, vertical: 4),
                           ),
+                          if (hasGrade)
+                            ExpressivePill(
+                              label: course.overviewGrade!,
+                              backgroundColor: cs.surfaceContainerLow,
+                              foregroundColor: cs.primary,
+                              fontWeight: FontWeight.w700,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              onTap: () => openCourse(tab: 1),
+                            )
+                          else
+                            ExpressivePill(
+                              label: course.isCurrent
+                                  ? s.currentCourseTag
+                                  : s.archiveTag,
+                              backgroundColor: cs.surfaceContainerLow,
+                              foregroundColor: cs.onSurfaceVariant,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                            ),
+                          if (hasGrade && !course.isCurrent)
+                            ExpressivePill(
+                              label: s.archiveTag,
+                              backgroundColor: cs.surfaceContainerLow,
+                              foregroundColor: cs.onSurfaceVariant,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 9, vertical: 4),
+                            ),
                         ],
-                      ],
+                      ),
                     ),
-                    if (professor.isNotEmpty) ...[
-                      const SizedBox(height: 5),
-                      GestureDetector(
-                        onLongPress: () async {
-                          AppHaptics.medium();
-                          await Clipboard.setData(
-                              ClipboardData(text: professor));
-                          if (context.mounted) {
-                            showQuickToast(context, s.copiedToast(professor));
+                    SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: PopupMenuButton<int>(
+                        padding: EdgeInsets.zero,
+                        iconSize: 20,
+                        icon: Icon(
+                          Icons.more_vert_rounded,
+                          size: 20,
+                          color: cs.onSurfaceVariant,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        onSelected: (val) {
+                          if (val == 4) {
+                            openSyllabusUrl();
+                          } else {
+                            openCourse(tab: val);
                           }
                         },
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.person_outline_rounded,
-                              size: 14,
-                              color: cs.primary,
+                        itemBuilder: (ctx) => [
+                          PopupMenuItem<int>(
+                            value: 0,
+                            child: Row(
+                              children: [
+                                Icon(Icons.assignment_outlined,
+                                    size: 18, color: cs.onSurface),
+                                const SizedBox(width: 10),
+                                Text(s.tabAssignments),
+                              ],
                             ),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: Text(
-                                professor,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: tt.bodySmall?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
+                          ),
+                          PopupMenuItem<int>(
+                            value: 1,
+                            child: Row(
+                              children: [
+                                Icon(Icons.grade_outlined,
+                                    size: 18, color: cs.onSurface),
+                                const SizedBox(width: 10),
+                                Text(s.tabGrades),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                          PopupMenuItem<int>(
+                            value: 2,
+                            child: Row(
+                              children: [
+                                Icon(Icons.fact_check_outlined,
+                                    size: 18, color: cs.onSurface),
+                                const SizedBox(width: 10),
+                                Text(s.tabAttendance),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem<int>(
+                            value: 3,
+                            child: Row(
+                              children: [
+                                Icon(Icons.folder_outlined,
+                                    size: 18, color: cs.onSurface),
+                                const SizedBox(width: 10),
+                                Text(s.tabFiles),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem<int>(
+                            value: 4,
+                            child: Row(
+                              children: [
+                                Icon(Icons.description_outlined,
+                                    size: 18, color: cs.primary),
+                                const SizedBox(width: 10),
+                                Text(s.syllabus),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                    if (classroom.isNotEmpty || slots.isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: () {
-                          AppHaptics.light();
-                          app.openTab(
-                            2,
-                            timetableDay:
-                                TimetableService.firstDayIndex(schedule),
-                          );
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // 2. Course Title
+                Text(
+                  course.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: tt.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    height: 1.25,
+                  ),
+                ),
+
+                // 3. Schedule & Instructor Row
+                if (professor.isNotEmpty ||
+                    classroom.isNotEmpty ||
+                    slots.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (professor.isNotEmpty)
+                        GestureDetector(
+                          onLongPress: () async {
+                            AppHaptics.medium();
+                            await Clipboard.setData(
+                                ClipboardData(text: professor));
+                            if (context.mounted) {
+                              showQuickToast(context, s.copiedToast(professor));
+                            }
+                          },
                           child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                Icons.meeting_room_outlined,
-                                size: 14,
-                                color: cs.secondary,
+                                Icons.person_outline_rounded,
+                                size: 15,
+                                color: cs.onSurfaceVariant,
                               ),
-                              const SizedBox(width: 5),
-                              Expanded(
+                              const SizedBox(width: 4),
+                              Flexible(
                                 child: Text(
-                                  [
-                                    if (classroom.isNotEmpty) classroom,
-                                    if (slots.isNotEmpty) slots,
-                                  ].join(' • '),
+                                  professor,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: tt.bodySmall?.copyWith(
                                     color: cs.onSurfaceVariant,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      ),
+                      if (classroom.isNotEmpty || slots.isNotEmpty)
+                        InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () {
+                            AppHaptics.light();
+                            app.openTab(
+                              2,
+                              timetableDay:
+                                  TimetableService.firstDayIndex(schedule),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 1),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.meeting_room_outlined,
+                                  size: 15,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    [
+                                      if (classroom.isNotEmpty) classroom,
+                                      if (slots.isNotEmpty) slots,
+                                    ].join(' • '),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: tt.bodySmall?.copyWith(
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                     ],
-                    if (!course.isCurrent) ...[
-                      const SizedBox(height: 6),
-                      ExpressivePill(
-                        label: s.archiveTag,
-                        backgroundColor: cs.surfaceContainerHigh,
-                        foregroundColor: cs.onSurfaceVariant,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        fontSize: 11,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: ExpressivePill(
-                    icon: statusIcon,
-                    label: statusText,
-                    backgroundColor: statusBg,
-                    foregroundColor: statusFg,
-                    fontWeight: FontWeight.w700,
-                    onTap: () => openCourse(tab: 0),
                   ),
-                ),
-                const SizedBox(width: 8),
+                ],
+                const SizedBox(height: 10),
+
+                // 4. Status Info Pill
                 Material(
-                  color: Colors.transparent,
+                  color: cs.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(999),
+                  clipBehavior: Clip.antiAlias,
                   child: InkWell(
+                    onTap: () => openCourse(tab: 0),
                     borderRadius: BorderRadius.circular(999),
-                    onTap: () => launchUrl(
-                      Uri.parse(EclassService.syllabusUrl(course.id)),
-                      mode: LaunchMode.externalApplication,
-                    ),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 4),
+                          horizontal: 10, vertical: 5),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            s.syllabus,
-                            style: tt.labelMedium?.copyWith(
-                              color: cs.primary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(width: 2),
                           Icon(
-                            Icons.chevron_right_rounded,
-                            size: 16,
+                            statusIcon,
+                            size: 15,
                             color: cs.primary,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              statusText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: tt.labelMedium?.copyWith(
+                                color: cs.onSurfaceVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                         ],
                       ),
                     ),
                   ),
+                ),
+                const SizedBox(height: 12),
+
+                // 5. Bottom Action Row
+                Container(
+                  height: 1,
+                  color: cs.outlineVariant.withValues(alpha: 0.25),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(999),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(999),
+                        onTap: openSyllabusUrl,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.description_outlined,
+                                size: 16,
+                                color: cs.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                s.syllabus,
+                                style: tt.labelMedium?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Material(
+                      color: cs.primary,
+                      borderRadius: BorderRadius.circular(999),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () => openCourse(tab: 0),
+                        borderRadius: BorderRadius.circular(999),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                s.openCourseBtn,
+                                style: tt.labelMedium?.copyWith(
+                                  color: cs.onPrimary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Icon(
+                                Icons.arrow_forward_rounded,
+                                size: 15,
+                                color: cs.onPrimary,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
