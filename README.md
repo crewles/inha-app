@@ -22,3 +22,11 @@ Android-приложение для студентов **Inha University (Таш
 flutter pub get
 flutter build apk --release --target-platform android-arm64
 ```
+
+## Участие в разработке
+
+Будем рады баг-репортам, предложениям и Pull Request'ам. Правила настройки окружения, структура проекта и чек-лист перед отправкой изменений описаны в [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Лицензия
+
+Проект распространяется под лицензией MIT — подробности в файле [LICENSE](LICENSE).
