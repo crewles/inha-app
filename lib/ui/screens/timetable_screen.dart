@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/models.dart';
 import '../../services/timetable_service.dart';
 import '../../state/app_state.dart';
+import '../widgets/app_haptics.dart';
+import '../widgets/expressive_sheets.dart';
 import '../widgets/expressive_widgets.dart';
+import 'course_detail_screen.dart';
 
 class TimetableScreen extends StatefulWidget {
   const TimetableScreen({super.key});
@@ -124,9 +128,32 @@ class _TimetableScreenState extends State<TimetableScreen> {
     return '$monName ${target.day}, ${target.year}';
   }
 
+  void _openEntryTarget(
+      BuildContext context, AppState app, ScheduleEntry entry) {
+    AppHaptics.light();
+    final matched = app.findCourseForSubject(entry.subject);
+    if (matched != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CourseDetailScreen(course: matched),
+        ),
+      );
+    } else {
+      showClassInfoSheet(context, entry);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
+    if (app.activeTabIndex == 2) {
+      final requestedDay = app.consumePendingTimetableDay();
+      if (requestedDay != null && requestedDay != _selectedDayIdx) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _selectedDayIdx = requestedDay);
+        });
+      }
+    }
     final s = app.s;
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
@@ -239,7 +266,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   ),
                   if (next != null) ...[
                     const SizedBox(height: 14),
-                    _buildNextLessonCard(context, next, tt, s),
+                    _buildNextLessonCard(context, app, next, tt, s),
                   ],
                   const SizedBox(height: 18),
                   ExpressiveSegmentedControl<int>(
@@ -255,7 +282,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     children: [
                       Flexible(
                         child: Text(
-                          s.dayScheduleTitle(_selectedDayIdx),
+                          s.dayFullNames[_selectedDayIdx],
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: tt.titleSmall
@@ -292,7 +319,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     )
                   else
                     for (int i = 0; i < dayEntries.length; i++) ...[
-                      _buildLessonRow(context, dayEntries[i], i, cs, tt),
+                      _buildLessonRow(context, app, dayEntries[i], i, cs, tt, s),
                       if (i != dayEntries.length - 1)
                         const SizedBox(height: 12),
                     ],
@@ -304,6 +331,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
   Widget _buildNextLessonCard(
     BuildContext context,
+    AppState app,
     (ScheduleEntry, String, int?) next,
     TextTheme tt,
     dynamic s,
@@ -320,6 +348,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     return HeroGradientCard(
       borderRadius: 28,
       padding: const EdgeInsets.all(18),
+      onTap: () => _openEntryTarget(context, app, entry),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -441,10 +470,12 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
   Widget _buildLessonRow(
     BuildContext context,
+    AppState app,
     ScheduleEntry e,
     int index,
     ColorScheme cs,
     TextTheme tt,
+    dynamic s,
   ) {
     final isFirst = index == 0;
     final timeBg = isFirst ? cs.surfaceContainerHigh : cs.surfaceContainer;
@@ -453,6 +484,8 @@ class _TimetableScreenState extends State<TimetableScreen> {
         isFirst ? cs.surfaceContainer : cs.secondaryFixed;
     final roomFg =
         isFirst ? cs.primary : cs.onSecondaryFixed;
+    final roomsText =
+        e.classrooms.map(TimetableService.cleanClassroomName).join(', ');
 
     return IntrinsicHeight(
       child: Row(
@@ -498,6 +531,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
             child: ExpressiveCard(
               borderRadius: 20,
               padding: const EdgeInsets.all(16),
+              onTap: () => _openEntryTarget(context, app, e),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -520,6 +554,14 @@ class _TimetableScreenState extends State<TimetableScreen> {
                           backgroundColor: roomBg,
                           foregroundColor: roomFg,
                           fontWeight: FontWeight.w700,
+                          onLongPress: () async {
+                            AppHaptics.medium();
+                            await Clipboard.setData(
+                                ClipboardData(text: roomsText));
+                            if (context.mounted) {
+                              showQuickToast(context, s.copiedToast(roomsText));
+                            }
+                          },
                         ),
                       ],
                     ],

@@ -2,21 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../state/app_state.dart';
+import '../widgets/app_haptics.dart';
 import 'assignments_screen.dart';
 import 'courses_screen.dart';
 import 'ins_screen.dart';
 import 'settings_screen.dart';
 import 'timetable_screen.dart';
 
-class HomeShell extends StatefulWidget {
+class HomeShell extends StatelessWidget {
   const HomeShell({super.key});
-
-  @override
-  State<HomeShell> createState() => _HomeShellState();
-}
-
-class _HomeShellState extends State<HomeShell> {
-  int _index = 0;
 
   static const _pages = <Widget>[
     CoursesScreen(),
@@ -28,11 +22,13 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.watch<AppState>().s;
+    final app = context.watch<AppState>();
+    final s = app.s;
     final cs = Theme.of(context).colorScheme;
+    final index = app.activeTabIndex.clamp(0, _pages.length - 1);
 
     return Scaffold(
-      body: IndexedStack(index: _index, children: _pages),
+      body: IndexedStack(index: index, children: _pages),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           border: Border(
@@ -43,8 +39,12 @@ class _HomeShellState extends State<HomeShell> {
           ),
         ),
         child: NavigationBar(
-          selectedIndex: _index,
-          onDestinationSelected: (i) => setState(() => _index = i),
+          selectedIndex: index,
+          onDestinationSelected: (i) {
+            AppHaptics.selection();
+            ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+            app.openTab(i);
+          },
           destinations: [
             NavigationDestination(
               icon: const Icon(Icons.school_outlined),

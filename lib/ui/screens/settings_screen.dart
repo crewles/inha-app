@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../services/update_service.dart';
 import '../../state/app_state.dart';
+import '../widgets/app_haptics.dart';
+import '../widgets/expressive_sheets.dart';
 import '../widgets/expressive_widgets.dart';
+import 'widget_gallery_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -182,41 +187,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                Row(
-                  children: [
-                    InitialsAvatar(
-                      name: displayName,
-                      size: 48,
-                      showVerifiedBadge: true,
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            displayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: tt.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            gradeYear.isNotEmpty
-                                ? 'Student ID: $studentId • ${s.yearLabel(gradeYear)}'
-                                : 'Student ID: $studentId',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: tt.bodySmall?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
+                GestureDetector(
+                  onLongPress: studentId.isEmpty
+                      ? null
+                      : () async {
+                          AppHaptics.medium();
+                          await Clipboard.setData(
+                              ClipboardData(text: studentId));
+                          if (context.mounted) {
+                            showQuickToast(context, s.copiedToast(studentId));
+                          }
+                        },
+                  child: Row(
+                    children: [
+                      InitialsAvatar(
+                        name: displayName,
+                        size: 48,
+                        showVerifiedBadge: true,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              displayName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: tt.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              gradeYear.isNotEmpty
+                                  ? 'Student ID: $studentId • ${s.yearLabel(gradeYear)}'
+                                  : 'Student ID: $studentId',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: tt.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 _divider(cs),
                 InkWell(
@@ -337,8 +354,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       radius: 14,
                       iconSize: 20,
                       icon: Icons.wallpaper_rounded,
-                      backgroundColor: cs.secondaryFixed,
-                      iconColor: cs.onSecondaryFixed,
+                      backgroundColor: cs.primaryFixed,
+                      iconColor: cs.onPrimaryFixed,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -377,8 +394,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       radius: 14,
                       iconSize: 20,
                       icon: Icons.language_rounded,
-                      backgroundColor: cs.surfaceContainerHigh,
-                      iconColor: cs.onSurface,
+                      backgroundColor: cs.primaryFixed,
+                      iconColor: cs.onPrimaryFixed,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -415,6 +432,110 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ],
+                ),
+                _divider(cs),
+                Row(
+                  children: [
+                    SquircleIcon(
+                      size: 40,
+                      radius: 14,
+                      iconSize: 20,
+                      icon: Icons.vibration_rounded,
+                      backgroundColor: cs.primaryFixed,
+                      iconColor: cs.onPrimaryFixed,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            s.hapticsTitle,
+                            style: tt.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            s.hapticsSub,
+                            style: tt.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Switch(
+                      key: const ValueKey('switch_haptics'),
+                      value: settings.hapticsEnabled,
+                      onChanged: (v) async {
+                        await app.updateSettings(
+                          settings.copyWith(hapticsEnabled: v),
+                        );
+                        if (v) AppHaptics.medium();
+                      },
+                    ),
+                  ],
+                ),
+                _divider(cs),
+                Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    key: const ValueKey('open_widget_gallery_btn'),
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () {
+                      AppHaptics.light();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const WidgetGalleryScreen(),
+                        ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 6),
+                      child: Row(
+                        children: [
+                          SquircleIcon(
+                            size: 40,
+                            radius: 14,
+                            iconSize: 20,
+                            icon: Icons.widgets_outlined,
+                            backgroundColor: cs.primaryFixed,
+                            iconColor: cs.onPrimaryFixed,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.homeWidgetsTitle,
+                                  style: tt.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  s.homeWidgetsSub,
+                                  style: tt.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 20,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -476,8 +597,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       radius: 14,
                       iconSize: 20,
                       icon: Icons.notifications_active_outlined,
-                      backgroundColor: cs.secondaryFixed,
-                      iconColor: cs.onSecondaryFixed,
+                      backgroundColor: cs.primaryFixed,
+                      iconColor: cs.onPrimaryFixed,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -534,8 +655,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       radius: 14,
                       iconSize: 20,
                       icon: Icons.sync_rounded,
-                      backgroundColor: cs.surfaceContainerHigh,
-                      iconColor: cs.onSurface,
+                      backgroundColor: cs.primaryFixed,
+                      iconColor: cs.onPrimaryFixed,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -590,6 +711,105 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
                 _divider(cs),
+                Row(
+                  children: [
+                    SquircleIcon(
+                      size: 40,
+                      radius: 14,
+                      iconSize: 20,
+                      icon: Icons.grade_outlined,
+                      backgroundColor: cs.primaryFixed,
+                      iconColor: cs.onPrimaryFixed,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            s.gradeAlertsTitle,
+                            style: tt.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            s.gradeAlertsSub,
+                            style: tt.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Switch(
+                      value: settings.notifyGrades,
+                      onChanged: (v) {
+                        AppHaptics.selection();
+                        app.updateSettings(
+                          settings.copyWith(notifyGrades: v),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                _divider(cs),
+                Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    key: const ValueKey('test_notifications_btn'),
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () {
+                      AppHaptics.light();
+                      showNotificationDiagnosticsSheet(context, app);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 6),
+                      child: Row(
+                        children: [
+                          SquircleIcon(
+                            size: 40,
+                            radius: 14,
+                            iconSize: 20,
+                            icon: Icons.notifications_paused_outlined,
+                            backgroundColor: cs.primaryFixed,
+                            iconColor: cs.onPrimaryFixed,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.testNotificationsTitle,
+                                  style: tt.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  s.testNotificationsSub,
+                                  style: tt.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 20,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                _divider(cs),
                 SizedBox(
                   height: 46,
                   child: FilledButton.tonal(
@@ -639,59 +859,156 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                InkWell(
+                Material(
+                  color: Colors.transparent,
                   borderRadius: BorderRadius.circular(14),
-                  onTap: () async {
-                    await app.clearCache();
-                    await _loadCacheSize();
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(s.cacheCleared)),
-                      );
-                    }
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        SquircleIcon(
-                          size: 40,
-                          radius: 14,
-                          iconSize: 20,
-                          icon: Icons.delete_sweep_outlined,
-                          backgroundColor: cs.surfaceContainerHigh,
-                          iconColor: cs.onSurface,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                s.clearOfflineCacheTitle,
-                                style: tt.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                _cacheBytes > 0
-                                    ? s.offlineCacheSub(
-                                        formatFileSize(_cacheBytes))
-                                    : s.offlineCache,
-                                style: tt.bodySmall?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    key: const ValueKey('check_updates_btn'),
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: app.isCheckingUpdate
+                        ? null
+                        : () async {
+                            AppHaptics.light();
+                            final res = await app.checkForUpdate();
+                            if (!context.mounted) return;
+                            if (res.status == UpdateCheckStatus.available &&
+                                res.release != null) {
+                              await showUpdateAvailableSheet(
+                                  context, res.release!);
+                            } else if (res.status ==
+                                UpdateCheckStatus.upToDate) {
+                              showQuickToast(context, s.upToDateToast);
+                            } else if (res.status ==
+                                UpdateCheckStatus.unavailable) {
+                              showQuickToast(
+                                  context, s.updateRepoPrivateToast);
+                            } else {
+                              showQuickToast(
+                                  context, s.updateCheckFailedToast);
+                            }
+                          },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 6),
+                      child: Row(
+                        children: [
+                          SquircleIcon(
+                            size: 40,
+                            radius: 14,
+                            iconSize: 20,
+                            icon: Icons.system_update_rounded,
+                            backgroundColor: cs.primaryFixed,
+                            iconColor: cs.onPrimaryFixed,
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Icon(
-                          Icons.delete_outline_rounded,
-                          size: 20,
-                          color: cs.error,
-                        ),
-                      ],
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.checkUpdatesTitle,
+                                  style: tt.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  s.checkUpdatesSub(
+                                      UpdateService.currentVersion),
+                                  style: tt.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          if (app.isCheckingUpdate)
+                            SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: cs.primary,
+                              ),
+                            )
+                          else if (app.availableUpdate != null)
+                            ExpressivePill(
+                              label: s.updateAvailableBadge(
+                                  app.availableUpdate!.version),
+                              backgroundColor: cs.primary,
+                              foregroundColor: cs.onPrimary,
+                              fontWeight: FontWeight.w700,
+                            )
+                          else
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              size: 20,
+                              color: cs.onSurfaceVariant,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                _divider(cs),
+                Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () async {
+                      await app.clearCache();
+                      await _loadCacheSize();
+                      if (context.mounted) {
+                        showQuickToast(context, s.cacheCleared);
+                      }
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 6),
+                      child: Row(
+                        children: [
+                          SquircleIcon(
+                            size: 40,
+                            radius: 14,
+                            iconSize: 20,
+                            icon: Icons.delete_sweep_outlined,
+                            backgroundColor: cs.errorContainer,
+                            iconColor: cs.onErrorContainer,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.clearOfflineCacheTitle,
+                                  style: tt.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  _cacheBytes > 0
+                                      ? s.offlineCacheSub(
+                                          formatFileSize(_cacheBytes))
+                                      : s.offlineCache,
+                                  style: tt.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.delete_outline_rounded,
+                            size: 20,
+                            color: cs.error,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_next_lecture_label">Next Lecture</string>
+    <string name="widget_today_schedule_label">Today\'s Schedule</string>
+    <string name="widget_ins_academic_label">INS GPA &amp; Credits</string>
+    <string name="widget_deadlines_label">Deadlines &amp; Tasks</string>
+</resources>

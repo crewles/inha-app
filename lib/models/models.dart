@@ -111,6 +111,11 @@ class Assignment {
   final String? gradeMax;
   final String? url;
   final List<AssignmentFile> files;
+  final String intro;
+  final String? maxPoints;
+  final int cutoffTimestamp;
+  final List<AssignmentFile> submittedFiles;
+  final String feedbackComment;
   final int updatedAt;
 
   const Assignment({
@@ -126,15 +131,76 @@ class Assignment {
     this.gradeMax,
     this.url,
     this.files = const [],
+    this.intro = '',
+    this.maxPoints,
+    this.cutoffTimestamp = 0,
+    this.submittedFiles = const [],
+    this.feedbackComment = '',
     this.updatedAt = 0,
   });
 
+  bool get hasGrade => grade != null && grade!.trim().isNotEmpty;
+
   bool get isSubmitted {
+    if (hasGrade) return true;
     final s = status.toLowerCase();
     return s.contains('submitted') ||
         s.contains('сдано') ||
         s.contains('отправлено') ||
         s.contains('graded');
+  }
+
+  bool get isGradedOnly {
+    if (!hasGrade) return false;
+    final s = status.toLowerCase();
+    return !s.contains('submitted') &&
+        !s.contains('сдано') &&
+        !s.contains('отправлено');
+  }
+
+  static List<Assignment> sortForDisplay(
+    List<Assignment> items, {
+    required bool pendingMode,
+    int? nowSec,
+  }) {
+    final now = nowSec ?? (DateTime.now().millisecondsSinceEpoch ~/ 1000);
+    final sorted = List<Assignment>.from(items);
+    sorted.sort((a, b) {
+      if (pendingMode) {
+        final aGroup = a.dueTimestamp >= now
+            ? 0
+            : (a.dueTimestamp > 0 ? 1 : 2);
+        final bGroup = b.dueTimestamp >= now
+            ? 0
+            : (b.dueTimestamp > 0 ? 1 : 2);
+        if (aGroup != bGroup) return aGroup.compareTo(bGroup);
+        if (aGroup == 0) {
+          final cmp = a.dueTimestamp.compareTo(b.dueTimestamp);
+          if (cmp != 0) return cmp;
+        } else if (aGroup == 1) {
+          final cmp = b.dueTimestamp.compareTo(a.dueTimestamp);
+          if (cmp != 0) return cmp;
+        }
+        return (b.assignId ?? 0).compareTo(a.assignId ?? 0);
+      } else {
+        if (a.dueTimestamp > 0 && b.dueTimestamp > 0) {
+          final cmp = b.dueTimestamp.compareTo(a.dueTimestamp);
+          if (cmp != 0) return cmp;
+        } else if (a.dueTimestamp > 0) {
+          return -1;
+        } else if (b.dueTimestamp > 0) {
+          return 1;
+        }
+        return (b.assignId ?? 0).compareTo(a.assignId ?? 0);
+      }
+    });
+    return sorted;
+  }
+
+  String? get effectiveMaxPoints {
+    if (gradeMax != null && gradeMax!.isNotEmpty) return gradeMax;
+    if (maxPoints != null && maxPoints!.isNotEmpty) return maxPoints;
+    return null;
   }
 
   String? get gradeDisplay {
@@ -158,20 +224,28 @@ class Assignment {
         'grade_max': gradeMax,
         'url': url,
         'files_json': jsonEncode(files.map((f) => f.toJson()).toList()),
+        'intro': intro,
+        'max_points': maxPoints,
+        'cutoff_timestamp': cutoffTimestamp,
+        'submitted_files_json':
+            jsonEncode(submittedFiles.map((f) => f.toJson()).toList()),
+        'feedback_comment': feedbackComment,
         'updated_at': updatedAt,
       };
 
   factory Assignment.fromMap(Map<String, dynamic> m) {
-    List<AssignmentFile> parsedFiles = [];
-    final raw = m['files_json'] as String?;
-    if (raw != null && raw.isNotEmpty) {
+    List<AssignmentFile> parseFiles(String? raw) {
+      if (raw == null || raw.isEmpty) return const [];
       try {
         final list = jsonDecode(raw) as List<dynamic>;
-        parsedFiles = list
+        return list
             .map((e) => AssignmentFile.fromJson(e as Map<String, dynamic>))
             .toList();
-      } catch (_) {}
+      } catch (_) {
+        return const [];
+      }
     }
+
     return Assignment(
       id: m['id'] as String,
       assignId: m['assign_id'] as int?,
@@ -184,7 +258,12 @@ class Assignment {
       grade: m['grade'] as String?,
       gradeMax: m['grade_max'] as String?,
       url: m['url'] as String?,
-      files: parsedFiles,
+      files: parseFiles(m['files_json'] as String?),
+      intro: (m['intro'] as String?) ?? '',
+      maxPoints: m['max_points'] as String?,
+      cutoffTimestamp: (m['cutoff_timestamp'] as int?) ?? 0,
+      submittedFiles: parseFiles(m['submitted_files_json'] as String?),
+      feedbackComment: (m['feedback_comment'] as String?) ?? '',
       updatedAt: (m['updated_at'] as int?) ?? 0,
     );
   }
@@ -535,6 +614,7 @@ class AppSettings {
   final int bgSyncIntervalHours;
   final String timetableGroup;
   final int lastSyncAt;
+  final bool hapticsEnabled;
 
   const AppSettings({
     this.themeMode = 'system',
@@ -550,6 +630,7 @@ class AppSettings {
     this.bgSyncIntervalHours = 2,
     this.timetableGroup = '',
     this.lastSyncAt = 0,
+    this.hapticsEnabled = true,
   });
 
   AppSettings copyWith({
@@ -566,6 +647,7 @@ class AppSettings {
     int? bgSyncIntervalHours,
     String? timetableGroup,
     int? lastSyncAt,
+    bool? hapticsEnabled,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -582,8 +664,55 @@ class AppSettings {
       bgSyncIntervalHours: bgSyncIntervalHours ?? this.bgSyncIntervalHours,
       timetableGroup: timetableGroup ?? this.timetableGroup,
       lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+      hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
     );
   }
+}
+
+class SyllabusWeight {
+  final String courseId;
+  final String label;
+  final double percentage;
+
+  const SyllabusWeight({
+    required this.courseId,
+    required this.label,
+    required this.percentage,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'course_id': courseId,
+        'label': label,
+        'percentage': percentage,
+      };
+
+  factory SyllabusWeight.fromMap(Map<String, dynamic> m) => SyllabusWeight(
+        courseId: (m['course_id'] as String?) ?? '',
+        label: (m['label'] as String?) ?? '',
+        percentage: (m['percentage'] as num?)?.toDouble() ?? 0.0,
+      );
+}
+
+class AppReleaseInfo {
+  final String version;
+  final String tagName;
+  final String title;
+  final String notes;
+  final String htmlUrl;
+  final String? apkUrl;
+  final String? apkName;
+  final int apkSize;
+
+  const AppReleaseInfo({
+    required this.version,
+    required this.tagName,
+    required this.title,
+    required this.notes,
+    required this.htmlUrl,
+    this.apkUrl,
+    this.apkName,
+    this.apkSize = 0,
+  });
 }
 
 /// Matched timetable summary for a course (from EduPage entries).

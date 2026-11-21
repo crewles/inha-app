@@ -23,7 +23,7 @@ class AppDatabase {
     final fullPath = p.join(dbPath, 'inha_app.db');
     return openDatabase(
       fullPath,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE credentials (
@@ -69,7 +69,28 @@ class AppDatabase {
             grade_max TEXT,
             url TEXT,
             files_json TEXT NOT NULL,
+            intro TEXT NOT NULL DEFAULT '',
+            max_points TEXT,
+            cutoff_timestamp INTEGER NOT NULL DEFAULT 0,
+            submitted_files_json TEXT NOT NULL DEFAULT '[]',
+            feedback_comment TEXT NOT NULL DEFAULT '',
             updated_at INTEGER NOT NULL
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE syllabus_weights (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            course_id TEXT NOT NULL,
+            label TEXT NOT NULL,
+            percentage REAL NOT NULL
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE hidden_assignments (
+            assignment_id TEXT PRIMARY KEY,
+            hidden_at INTEGER NOT NULL
           )
         ''');
 
@@ -172,6 +193,34 @@ class AppDatabase {
             }
           }
         }
+        if (oldVersion < 3) {
+          const altersV3 = [
+            "ALTER TABLE assignments ADD COLUMN intro TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE assignments ADD COLUMN max_points TEXT",
+            "ALTER TABLE assignments ADD COLUMN cutoff_timestamp INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE assignments ADD COLUMN submitted_files_json TEXT NOT NULL DEFAULT '[]'",
+            "ALTER TABLE assignments ADD COLUMN feedback_comment TEXT NOT NULL DEFAULT ''",
+          ];
+          for (final sql in altersV3) {
+            try {
+              await db.execute(sql);
+            } catch (_) {}
+          }
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS syllabus_weights (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              course_id TEXT NOT NULL,
+              label TEXT NOT NULL,
+              percentage REAL NOT NULL
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS hidden_assignments (
+              assignment_id TEXT PRIMARY KEY,
+              hidden_at INTEGER NOT NULL
+            )
+          ''');
+        }
       },
     );
   }
@@ -220,6 +269,8 @@ class AppDatabase {
       await txn.delete('ins_meta');
       await txn.delete('timetable_entries');
       await txn.delete('timetable_meta');
+      await txn.delete('syllabus_weights');
+      await txn.delete('hidden_assignments');
     });
   }
 
@@ -235,6 +286,7 @@ class AppDatabase {
       await txn.delete('ins_meta');
       await txn.delete('timetable_entries');
       await txn.delete('timetable_meta');
+      await txn.delete('syllabus_weights');
     });
   }
 
@@ -260,6 +312,7 @@ class AppDatabase {
           int.tryParse(map['bg_sync_interval_hours'] ?? '2') ?? 2,
       timetableGroup: map['timetable_group'] ?? '',
       lastSyncAt: int.tryParse(map['last_sync_at'] ?? '0') ?? 0,
+      hapticsEnabled: (map['haptics_enabled'] ?? 'true') == 'true',
     );
   }
 
@@ -497,5 +550,54 @@ class AppDatabase {
     final db = await database;
     final rows = await db.query('timetable_meta');
     return {for (final r in rows) r['key'] as String: r['value'] as String};
+  }
+
+  // ── Syllabus Weights ────────────────────────────────────────
+
+  Future<List<SyllabusWeight>> getSyllabusWeights(String courseId) async {
+    final db = await database;
+    final rows = await db.query('syllabus_weights',
+        where: 'course_id = ?', whereArgs: [courseId]);
+    return rows.map(SyllabusWeight.fromMap).toList();
+  }
+
+  Future<void> saveSyllabusWeights(
+      String courseId, List<SyllabusWeight> items) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('syllabus_weights',
+          where: 'course_id = ?', whereArgs: [courseId]);
+      for (final item in items) {
+        await txn.insert('syllabus_weights', item.toMap());
+      }
+    });
+  }
+
+  // ── Hidden Assignments ──────────────────────────────────────
+
+  Future<Set<String>> getHiddenAssignmentIds() async {
+    final db = await database;
+    final rows = await db.query('hidden_assignments', columns: ['assignment_id']);
+    return rows.map((r) => r['assignment_id'] as String).toSet();
+  }
+
+  Future<void> setAssignmentHidden(String assignmentId, bool hidden) async {
+    final db = await database;
+    if (hidden) {
+      await db.insert(
+        'hidden_assignments',
+        {
+          'assignment_id': assignmentId,
+          'hidden_at': DateTime.now().millisecondsSinceEpoch,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } else {
+      await db.delete(
+        'hidden_assignments',
+        where: 'assignment_id = ?',
+        whereArgs: [assignmentId],
+      );
+    }
   }
 }

@@ -1,3 +1,5 @@
+import '../services/update_service.dart';
+
 class S {
   final String lang;
   const S(this.lang);
@@ -11,7 +13,7 @@ class S {
   String get campusFooter => isRu
       ? 'Inha University in Tashkent • Локальный SQLite'
       : 'Inha University in Tashkent • Local SQLite';
-  String get appVersion => 'v1.0.1';
+  String get appVersion => 'v${UpdateService.currentVersion}';
 
   // Navigation
   String get navCourses => isRu ? 'Курсы' : 'Courses';
@@ -344,7 +346,7 @@ class S {
   String get logoutPortal =>
       isRu ? 'Выйти из аккаунта' : 'Log out of Inha Portal';
   String get appVersionFooter =>
-      'Inha App v1.0.2 • Tashkent Campus';
+      'Inha App v${UpdateService.currentVersion} • Tashkent Campus';
   String get localStorageFooter => isRu
       ? 'Локальное хранилище SQLite • Прямое подключение к eClass & INS'
       : 'Local SQLite Storage • Direct eClass & INS Client';
@@ -405,4 +407,278 @@ class S {
       isRu ? 'Скачивание $done/$total...' : 'Downloading $done/$total...';
   String get downloadedLocallyBadge =>
       isRu ? 'На устройстве' : 'Saved offline';
+
+  // Assignment Detail (Stitch #12)
+  String get assignmentDetailTitle =>
+      isRu ? 'О задании' : 'Assignment Detail';
+  String get problemStatement =>
+      isRu ? 'Условие задания' : 'Problem Statement';
+  String get noDescriptionProvided =>
+      isRu ? 'Текстовое описание не указано в eClass.' : 'No description provided in eClass.';
+  String get attachedFiles =>
+      isRu ? 'Прикреплённые файлы' : 'Attached Files';
+  String get submissionPortal =>
+      isRu ? 'Отправка решения' : 'Submission Portal';
+  String get submittedFilesLabel =>
+      isRu ? 'Отправленные файлы' : 'Submitted Files';
+  String get professorFeedback =>
+      isRu ? 'Комментарий преподавателя' : 'Instructor Feedback';
+  String get pickFileToUpload =>
+      isRu ? 'Выбрать файл с устройства' : 'Choose solution file';
+  String get changeFile => isRu ? 'Заменить файл' : 'Replace file';
+  String get honorCodeLabel =>
+      isRu ? 'Подтвердить отправку на проверку' : 'Submit for grading (Honor Code)';
+  String get honorCodeSub => isRu
+      ? 'Подтверждает финальную отправку работы вместо черновика'
+      : 'Finalizes submission instead of keeping a draft';
+  String maxPointsLabel(String pts) =>
+      isRu ? 'Макс. $pts б.' : '$pts Pts Max';
+  String dueInCountdown(int d, int h, int m) {
+    if (d > 0) return isRu ? 'Осталось $dд $hч' : '${d}d ${h}h remaining';
+    if (h > 0) return isRu ? 'Осталось $hч $mм' : '${h}h ${m}m remaining';
+    return isRu ? 'Осталось $m мин' : '$m min remaining';
+  }
+
+  String get noDeadlineSet => isRu ? 'Без жёсткого дедлайна' : 'No deadline set';
+  String get uploadOnlyInWebHint => isRu
+      ? 'Отправка файлов через API недоступна — откройте задание в eClass.'
+      : 'API file upload unavailable for this task — open in eClass.';
+
+  // Hide / Dismiss Deadlines & Assignment Details
+  String get hideDeadline => isRu ? 'Скрыть задание' : 'Hide assignment';
+  String get hideAssignment => isRu ? 'Скрыть задание' : 'Hide assignment';
+  String get restoreDeadline => isRu ? 'Вернуть' : 'Restore';
+  String get hiddenFilter => isRu ? 'Скрытые' : 'Hidden';
+  String get deadlineHiddenToast => isRu
+      ? 'Задание скрыто из активных'
+      : 'Assignment hidden from active list';
+  String get deadlineRestoredToast =>
+      isRu ? 'Задание возвращено' : 'Assignment restored';
+  String get undoLabel => isRu ? 'Отменить' : 'Undo';
+  String get hiddenBadge => isRu ? 'Скрыто' : 'Hidden';
+  String get noInstructorComment =>
+      isRu ? 'Комментария от преподавателя нет' : 'No comment from instructor';
+  String get viewDetailsLabel => isRu ? 'Подробнее' : 'View Details';
+  String get gradedLabel => isRu ? 'Оценено' : 'Graded';
+  String get deadlineSectionLabel => isRu ? 'Срок сдачи' : 'Deadline';
+  String get openInEclassShort => 'eClass';
+
+  // Completion Breakdown Sheet
+  String get progressBreakdownTitle =>
+      isRu ? 'Детализация прогресса' : 'Completion Breakdown';
+  String get byStatusLabel => isRu ? 'ПО СТАТУСУ' : 'BY STATUS';
+  String get byCourseLabel => isRu ? 'ПО КУРСАМ' : 'BY COURSE';
+  String get tapToFilterHint => isRu
+      ? 'Нажмите на статус или курс для перехода'
+      : 'Tap a status or course to jump in';
+  String get noPendingInCourse =>
+      isRu ? 'Все задания сданы' : 'All tasks submitted';
+
+  // Syllabus Weights
+  String get fromSyllabusBadge => isRu ? 'Из силлабуса' : 'From Syllabus';
+
+  // Cross-Navigation & Info Sheets
+  String get classDetailsTitle => isRu ? 'Занятие' : 'Class Session';
+  String get transcriptDetailsTitle =>
+      isRu ? 'Запись транскрипта' : 'Transcript Record';
+  String copiedToast(String label) =>
+      isRu ? 'Скопировано: $label' : 'Copied: $label';
+  String get creditsFullLabel => isRu ? 'Кредиты' : 'Credits';
+  String get courseTypeLabel => isRu ? 'Тип курса' : 'Category';
+  String get semesterLabel => isRu ? 'Семестр' : 'Semester';
+  String get professorLabel => isRu ? 'Преподаватель' : 'Instructor';
+  String get classroomLabel => isRu ? 'Аудитория' : 'Classroom';
+  String get groupsLabel => isRu ? 'Группы' : 'Groups';
+  String get openCourseBtn => isRu ? 'Открыть курс' : 'Open Course';
+
+  // Haptics
+  String get hapticsTitle => isRu ? 'Тактильный отклик' : 'Haptic feedback';
+  String get hapticsSub => isRu
+      ? 'Лёгкая вибрация при переключениях и действиях'
+      : 'Subtle tactile vibration on taps and switches';
+
+  // Notifications & Diagnostics
+  String get gradeAlertsTitle => isRu ? 'Новые оценки' : 'New grade alerts';
+  String get gradeAlertsSub => isRu
+      ? 'Уведомлять при появлении или изменении оценок'
+      : 'Alert when course or INS grades update';
+  String get testNotificationsTitle =>
+      isRu ? 'Проверить уведомления' : 'Test Notifications';
+  String get testNotificationsSub => isRu
+      ? 'Мгновенный и отложенный тест, статус и расписание'
+      : 'Instant & 10s test, permission & scheduled queue';
+  String get notifDiagnosticsTitle =>
+      isRu ? 'Диагностика уведомлений' : 'Notification Diagnostics';
+  String get permissionStatusLabel =>
+      isRu ? 'Разрешение системы' : 'System Permission';
+  String get permissionGranted => isRu ? 'Разрешено' : 'Granted';
+  String get permissionDenied => isRu ? 'Отключено' : 'Denied';
+  String get grantPermissionBtn => isRu ? 'Разрешить' : 'Allow';
+  String scheduledAlertsCount(int total) =>
+      isRu ? '$total в очереди' : '$total scheduled';
+  String classAlertsCount(int n) =>
+      isRu ? 'Пары: $n' : 'Classes: $n';
+  String deadlineAlertsCount(int n) =>
+      isRu ? 'Дедлайны: $n' : 'Deadlines: $n';
+  String get classesMetricLabel => isRu ? 'Пары' : 'Classes';
+  String get deadlinesMetricLabel => isRu ? 'Дедлайны' : 'Deadlines';
+  String get scheduledMetricLabel => isRu ? 'В очереди' : 'Scheduled';
+  String get sendInstantTestBtn =>
+      isRu ? 'Мгновенный тест' : 'Send Instant Test';
+  String get schedule10sTestBtn => isRu ? 'Тест через 10с' : 'Test in 10s';
+  String get instantTestSentToast => isRu
+      ? 'Тестовое уведомление отправлено!'
+      : 'Test notification sent!';
+  String get delayedTestScheduledToast => isRu
+      ? 'Уведомление придёт через 10с — можно свернуть приложение'
+      : 'Notification scheduled in 10s — try minimizing the app';
+  String get delayedTestInexactToast => isRu
+      ? 'Разрешите «Будильники и напоминания» в настройках, иначе система задержит тест'
+      : 'Allow exact alarms in Android settings so 10s test fires on time';
+
+  // GPA Calculator & Simulator (Stitch)
+  String get gpaCalculatorTitle => isRu ? 'Калькулятор GPA' : 'GPA Calculator';
+  String get gpaCalculatorCaps => isRu ? 'КАЛЬКУЛЯТОР GPA' : 'GPA CALCULATOR';
+  String get gpaCalculatorSub => isRu
+      ? 'Прогноз семестрового и общего GPA по шкале 4.5'
+      : 'Simulate semester & cumulative GPA (4.5 scale)';
+  String get gpaSimulatorTitle =>
+      isRu ? 'Симулятор влияния на GPA' : 'GPA Impact Simulator';
+  String get gpaSimulatorDesc => isRu
+      ? 'Смоделируйте оценку за экзамен и посмотрите, как изменится итоговый GPA по предмету и семестру.'
+      : 'Simulate final exam outcomes and preview how they shift your course grade and semester GPA.';
+  String get calculateScenariosBtn =>
+      isRu ? 'Рассчитать сценарии' : 'Calculate Scenarios';
+  String get projectedGpaLabel =>
+      isRu ? 'ПРОГНОЗ ОБЩЕГО GPA' : 'PROJECTED CUMULATIVE GPA';
+  String get semesterGpaLabel => isRu ? 'GPA за семестр' : 'Semester GPA';
+  String get totalCreditsLabel => isRu ? 'Всего кредитов' : 'Total Credits';
+  String get currentStandingTitle =>
+      isRu ? 'Текущие данные (INS)' : 'Current Standing (INS)';
+  String get currentStandingSub => isRu
+      ? 'База по завершённым семестрам'
+      : 'Baseline from previous semesters';
+  String get priorCumGpaLabel => isRu ? 'Текущий GPA' : 'Prior Cumulative GPA';
+  String get completedCreditsLabel =>
+      isRu ? 'Закрыто кредитов' : 'Completed Credits';
+  String get semesterCoursesTitle =>
+      isRu ? 'Предметы семестра' : 'Current Semester Courses';
+  String coursesCountBadge(int n) {
+    if (!isRu) return n == 1 ? '1 course' : '$n courses';
+    final mod100 = n % 100;
+    final mod10 = n % 10;
+    if (mod10 == 1 && mod100 != 11) return '$n предмет';
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+      return '$n предмета';
+    }
+    return '$n предметов';
+  }
+
+  String get addCourseBtn => isRu ? 'Добавить предмет' : 'Add Course';
+  String get resetBtn => isRu ? 'Сбросить' : 'Reset';
+  String get courseScoreSimTitle =>
+      isRu ? 'Симулятор балла по курсу' : 'Course Score Simulator';
+  String get expectedRemainingScore =>
+      isRu ? 'Оценка за оставшийся итог' : 'Remaining Exam / Work Score';
+  String get customCourseHint => isRu ? 'Новый предмет' : 'New Course';
+  String crShort(int cr) => isRu ? '$cr кр.' : '$cr cr';
+  String get draftStatus => isRu ? 'Черновик (не отправлен)' : 'Draft (not submitted)';
+  String get courseGradeSliderLabel =>
+      isRu ? 'Предполагаемая оценка' : 'Course Grade';
+  String get autoModeBadge => isRu ? 'Авто' : 'Auto';
+  String get manualModeBadge => isRu ? 'Вручную' : 'Manual';
+  String get resetToAutoHint =>
+      isRu ? 'Сбросить в авто' : 'Reset to auto';
+  String get fromEclassBadge => 'eClass';
+  String get overallCoursePctLabel =>
+      isRu ? 'Итог по курсу' : 'Course Overall';
+  String get upcomingScheduledLabel =>
+      isRu ? 'БЛИЖАЙШИЕ ЗАПЛАНИРОВАННЫЕ' : 'NEXT SCHEDULED ALERTS';
+  String get noScheduledAlerts => isRu
+      ? 'Запланированных уведомлений пока нет. Выберите группу в Расписании или включите напоминания о дедлайнах.'
+      : 'No scheduled alerts yet. Pick a timetable group or enable deadline reminders.';
+  String get whatWeNotifyTitle =>
+      isRu ? 'О чём сообщают уведомления' : 'What Notifications Cover';
+  List<String> get whatWeNotifyItems => isRu
+      ? const [
+          'Начало пар (офлайн): за выбранное число минут до каждой пары недели.',
+          'Дедлайны (офлайн): за 24 часа и за 2 часа до сдачи (кроме скрытых).',
+          'Новые задания в фоне (WorkManager): периодическая проверка eClass API.',
+          'Новые оценки: при обновлении оценок в eClass или портале INS.',
+        ]
+      : const [
+          'Class Reminders (offline): weekly alerts before each group lecture.',
+          'Assignment Deadlines (offline): 24h & 2h before due date (excludes hidden).',
+          'Background New Tasks (WorkManager): periodic eClass API checks.',
+          'Grade Updates: when new grades appear on eClass or INS sync.',
+        ];
+
+  // Auto-Updater
+  String get appUpdatesTitle => isRu ? 'Обновления' : 'App Updates';
+  String get checkUpdatesTitle =>
+      isRu ? 'Проверить обновления' : 'Check for updates';
+  String checkUpdatesSub(String ver) => isRu
+      ? 'Текущая версия v$ver • GitHub Releases'
+      : 'Current version v$ver • GitHub Releases';
+  String get updateAvailableTitle =>
+      isRu ? 'Доступно обновление' : 'Update Available';
+  String updateAvailableBadge(String ver) =>
+      isRu ? 'Новая v$ver' : 'New v$ver';
+  String get whatsNewLabel => isRu ? 'Что нового' : "What's New";
+  String get downloadAndInstallBtn =>
+      isRu ? 'Скачать и установить' : 'Download & Install';
+  String downloadingUpdatePct(int pct) =>
+      isRu ? 'Скачивание... $pct%' : 'Downloading... $pct%';
+  String get openOnGithubBtn =>
+      isRu ? 'Открыть на GitHub' : 'Open on GitHub';
+  String get upToDateToast =>
+      isRu ? 'Установлена последняя версия' : 'You are on the latest version';
+  String get updateRepoPrivateToast => isRu
+      ? 'Репозиторий пока приватный или релизов ещё нет'
+      : 'Repository has no public releases yet';
+  String get updateCheckFailedToast => isRu
+      ? 'Не удалось проверить обновления'
+      : 'Failed to check for updates';
+  String get installPermissionPrompt => isRu
+      ? 'Разрешите установку из этого источника и нажмите снова'
+      : 'Allow app installs from this source and tap Install again';
+
+  // Android Home Screen Widgets (Stitch #11)
+  String get homeWidgetsTitle =>
+      isRu ? 'Виджеты рабочего стола' : 'Home Screen Widgets';
+  String get homeWidgetsSub => isRu
+      ? '4 виджета с живыми данными без открытия приложения'
+      : '4 Material You widgets synced from local SQLite';
+  String get widgetGalleryTitle =>
+      isRu ? 'Галерея виджетов' : 'Widget Gallery';
+  String get widgetGallerySubtitle => isRu
+      ? 'Предпросмотр с вашими текущими данными и быстрое добавление на экран Android'
+      : 'Live preview with your real portal data and one-tap home screen pinning';
+  String get addToHomeBtn => isRu ? 'На экран' : 'Add to Home';
+  String get widgetPinSentToast => isRu
+      ? 'Запрос на добавление виджета отправлен лаунчеру'
+      : 'Widget pin request sent to launcher';
+  String get widgetPinFallbackToast => isRu
+      ? 'Удерживайте пустое место на рабочем столе -> Виджеты -> Inha App'
+      : 'Long-press your home screen -> Widgets -> Inha App';
+  String get widgetNextLectureTitle =>
+      isRu ? 'Следующая пара' : 'Next Lecture Glance';
+  String get widgetNextLectureDesc => isRu
+      ? 'Ближайшее занятие, время и аудитория'
+      : 'Upcoming lecture countdown, time slot & room';
+  String get widgetTodayScheduleTitle =>
+      isRu ? 'Расписание на сегодня' : "Today's Schedule";
+  String get widgetTodayScheduleDesc => isRu
+      ? 'Список пар выбранной группы на текущий день'
+      : 'Up to 4 classes for your group today';
+  String get widgetInsAcademicTitle =>
+      isRu ? 'INS GPA и кредиты' : 'INS Academic';
+  String get widgetInsAcademicDesc => isRu
+      ? 'Компактная карточка GPA и активных курсов'
+      : 'Compact GPA dial & earned credits snapshot';
+  String get widgetDeadlinesTitle =>
+      isRu ? 'Дедлайны eClass' : 'Deadlines & Tasks';
+  String get widgetDeadlinesDesc => isRu
+      ? 'Срочные несданные задания (без скрытых)'
+      : 'Upcoming pending tasks (excludes hidden)';
 }

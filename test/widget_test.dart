@@ -3,16 +3,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:inhahub/models/models.dart';
+import 'package:inhahub/services/eclass_service.dart';
+import 'package:inhahub/services/gpa_calculator.dart';
 import 'package:inhahub/services/timetable_service.dart';
+import 'package:inhahub/services/update_service.dart';
 import 'package:inhahub/state/app_state.dart';
+import 'package:inhahub/ui/screens/assignment_detail_screen.dart';
 import 'package:inhahub/ui/screens/assignments_screen.dart';
 import 'package:inhahub/ui/screens/course_detail_screen.dart';
 import 'package:inhahub/ui/screens/courses_screen.dart';
+import 'package:inhahub/ui/screens/gpa_calculator_screen.dart';
 import 'package:inhahub/ui/screens/home_shell.dart';
 import 'package:inhahub/ui/screens/ins_screen.dart';
 import 'package:inhahub/ui/screens/login_screen.dart';
 import 'package:inhahub/ui/screens/settings_screen.dart';
 import 'package:inhahub/ui/screens/timetable_screen.dart';
+import 'package:inhahub/ui/screens/widget_gallery_screen.dart';
 import 'package:inhahub/ui/theme/app_theme.dart';
 import 'package:inhahub/ui/widgets/expressive_widgets.dart';
 
@@ -46,7 +52,13 @@ class FakeAppState extends AppState {
       isCurrent: false,
       overviewGrade: '89.4%',
     );
-    courses = [c1, c2];
+    const c3 = Course(
+      id: '103',
+      name: 'Computer Networks',
+      isCurrent: true,
+      overviewGrade: '91.0%',
+    );
+    courses = [c1, c2, c3];
 
     final soonTs = (DateTime.now().millisecondsSinceEpoch ~/ 1000) + 3600 * 12;
     allAssignments = [
@@ -59,6 +71,8 @@ class FakeAppState extends AppState {
         due: '21.11.2026 23:59',
         dueTimestamp: soonTs,
         status: 'No submission',
+        intro: 'Implement left-leaning red-black tree rotation primitives.',
+        maxPoints: '20',
         files: const [
           AssignmentFile(
             name: 'spec.pdf',
@@ -78,6 +92,41 @@ class FakeAppState extends AppState {
         status: 'Submitted (Graded)',
         grade: '19.5',
         gradeMax: '20',
+        feedbackComment: 'Clean O(h) rotation logic!',
+        submittedFiles: [
+          AssignmentFile(
+            name: 'bst_solution.cpp',
+            link: 'https://example.com/bst_solution.cpp',
+            size: 4200,
+          ),
+        ],
+      ),
+    ];
+
+    syllabusWeightsByCourse['103'] = const [
+      SyllabusWeight(courseId: '103', label: 'Midterm', percentage: 30),
+      SyllabusWeight(courseId: '103', label: 'Final', percentage: 40),
+      SyllabusWeight(courseId: '103', label: 'Assignments', percentage: 20),
+      SyllabusWeight(courseId: '103', label: 'Attendance', percentage: 10),
+    ];
+    gradesByCourse['103'] = const [
+      GradeItem(
+        courseId: '103',
+        name: 'Quiz 1',
+        value: '18.00',
+        category: 'Quizzes',
+        weight: '-',
+        range: '0-20',
+        percentage: '90.00 %',
+        itemType: 'item',
+      ),
+      GradeItem(
+        courseId: '103',
+        name: 'Course total',
+        value: '91.00',
+        range: '0-100',
+        percentage: '91.00 %',
+        itemType: 'total',
       ),
     ];
 
@@ -291,6 +340,21 @@ class FakeAppState extends AppState {
     timetableEntries = [];
     notifyListeners();
   }
+
+  @override
+  Future<void> setAssignmentHidden(String assignmentId, bool hidden) async {
+    if (hidden) {
+      hiddenAssignmentIds.add(assignmentId);
+    } else {
+      hiddenAssignmentIds.remove(assignmentId);
+    }
+    notifyListeners();
+  }
+
+  @override
+  Future<UpdateCheckResult> checkForUpdate({bool silent = false}) async {
+    return const UpdateCheckResult(status: UpdateCheckStatus.upToDate);
+  }
 }
 
 Widget _wrap(AppState state, Widget child, {bool dark = false}) {
@@ -491,7 +555,7 @@ void main() {
     expect(find.textContaining('B201'), findsOneWidget);
     expect(find.text('3.96'), findsOneWidget);
     expect(find.text('3.960000'), findsNothing);
-    expect(find.text('Syllabus'), findsOneWidget);
+    expect(find.text('Syllabus'), findsAtLeastNWidgets(1));
   });
 
   testWidgets('AssignmentsScreen renders progress and filters', (tester) async {
@@ -522,6 +586,7 @@ void main() {
     expect(find.text('50%'), findsOneWidget);
     expect(find.text('Submit work'), findsOneWidget);
     expect(find.text('Assignment 4: Red-Black Trees'), findsOneWidget);
+    expect(find.byKey(const ValueKey('assign_menu_101::1')), findsOneWidget);
 
     // Filter on Assignments tab
     await tester.tap(find.byKey(const ValueKey('cd_assign_filter_graded')));
@@ -618,5 +683,442 @@ void main() {
     await tester.pumpWidget(_wrap(customApp, const HomeShell()));
     await tester.pumpAndSettle();
     expect(find.byType(NavigationBar), findsOneWidget);
+  });
+
+  test('EclassService.parseSyllabusWeightsHtml extracts horizontal & vertical weights',
+      () {
+    const horizontalHtml = '''
+      <table>
+        <tr><th>출석(Attendance)</th><th>중간(Midterm)</th><th>기말(Final)</th><th>과제(Assignment)</th></tr>
+        <tr><td>10%</td><td>30%</td><td>40%</td><td>20%</td></tr>
+      </table>
+    ''';
+    final hWeights =
+        EclassService.parseSyllabusWeightsHtml(horizontalHtml, '101');
+    expect(hWeights.length, 4);
+    expect(hWeights[0].label, 'Attendance');
+    expect(hWeights[1].percentage, 30.0);
+
+    const verticalHtml = '''
+      <table>
+        <tr><td>Midterm</td><td>35 %</td></tr>
+        <tr><td>Final Exam</td><td>45 %</td></tr>
+        <tr><td>Project</td><td>20 %</td></tr>
+        <tr><td>Total</td><td>100 %</td></tr>
+      </table>
+    ''';
+    final vWeights = EclassService.parseSyllabusWeightsHtml(verticalHtml, '102');
+    expect(vWeights.length, 3);
+    expect(vWeights[2].label, 'Project');
+    expect(vWeights[2].percentage, 20.0);
+
+    const unrelatedHtml = '''
+      <table>
+        <tr><td>Week 1</td><td>2 hours</td></tr>
+        <tr><td>Week 2</td><td>3 hours</td></tr>
+      </table>
+    ''';
+    expect(
+      EclassService.parseSyllabusWeightsHtml(unrelatedHtml, '103'),
+      isEmpty,
+    );
+  });
+
+  test('TimetableService.matchSubjectToCourse & UpdateService.compareVersions', () {
+    const courses = [
+      Course(id: '1', name: 'Data Structures & Algorithms', isCurrent: true),
+      Course(id: '2', name: 'Calculus 1', isCurrent: true),
+    ];
+    final m1 = TimetableService.matchSubjectToCourse('Data Structure', courses);
+    expect(m1?.id, '1');
+    expect(TimetableService.matchSubjectToCourse('Calculus 2', courses), isNull);
+
+    expect(UpdateService.compareVersions('1.0.3', '1.0.2'), greaterThan(0));
+    expect(UpdateService.compareVersions('v1.1.0', '1.0.9'), greaterThan(0));
+    expect(UpdateService.compareVersions('1.0.3+4', '1.0.3'), 0);
+    expect(UpdateService.compareVersions('1.0.1', '1.0.3'), lessThan(0));
+  });
+
+  testWidgets('AssignmentDetailScreen renders problem statement, max pts, honor code, and hide action',
+      (tester) async {
+    final app = FakeAppState();
+    await tester.pumpWidget(
+      _wrap(app, AssignmentDetailScreen(assignment: app.allAssignments.first)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Assignment 4: Red-Black Trees'), findsOneWidget);
+    expect(find.text('20 Pts Max'), findsOneWidget);
+    expect(
+      find.text('Implement left-leaning red-black tree rotation primitives.'),
+      findsOneWidget,
+    );
+    expect(find.text('spec.pdf'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('ad_toggle_hide_btn')));
+    await tester.pumpAndSettle();
+    expect(app.isAssignmentHidden('101::1'), isTrue);
+    expect(find.text('Hidden'), findsOneWidget);
+  });
+
+  testWidgets('AssignmentsScreen hide/restore deadline and Completion Breakdown sheet work',
+      (tester) async {
+    final app = FakeAppState();
+    await tester.pumpWidget(_wrap(app, const AssignmentsScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('completion_pace_card')));
+    await tester.pumpAndSettle();
+    expect(find.text('Completion Breakdown'), findsOneWidget);
+    expect(find.text('BY COURSE'), findsOneWidget);
+
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('assign_menu_101::1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('toggle_hide_101::1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('filter_hidden')), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const ValueKey('filter_hidden')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('filter_hidden')));
+    await tester.pumpAndSettle();
+    expect(find.text('Assignment 4: Red-Black Trees'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('assign_menu_101::1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('toggle_hide_101::1')));
+    await tester.pumpAndSettle();
+    expect(app.isAssignmentHidden('101::1'), isFalse);
+  });
+
+  testWidgets('CourseDetailScreen initialTab opens Grades with From Syllabus fallback and simulator',
+      (tester) async {
+    final app = FakeAppState();
+    await tester.pumpWidget(
+      _wrap(app, CourseDetailScreen(course: app.courses[2], initialTab: 1)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Syllabus Weight Breakdown'), findsOneWidget);
+    expect(find.text('From Syllabus'), findsOneWidget);
+
+    final verticalScroll = find.byWidgetPredicate(
+      (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+    );
+    final btn = find.byKey(const ValueKey('cd_open_gpa_calc_btn'));
+    await tester.scrollUntilVisible(
+      btn,
+      250,
+      scrollable: verticalScroll,
+    );
+    await tester.ensureVisible(btn);
+    await tester.pumpAndSettle();
+    await tester.tap(btn);
+    await tester.pumpAndSettle();
+    expect(find.text('GPA Calculator'), findsOneWidget);
+    expect(find.text('COURSE SCORE SIMULATOR'), findsOneWidget);
+  });
+
+  test('Syllabus parser handles hyphenated Mid-term, rowspan headers, and 100% totals',
+      () {
+    const inha65Html = '''
+      <table>
+        <tr>
+          <th rowspan="2">Evaluation Ratio</th>
+          <th>Mid-term</th>
+          <th>Final</th>
+          <th>Attendance</th>
+          <th>Assignments</th>
+          <th>Quiz</th>
+          <th>Discussion</th>
+          <th>Total</th>
+        </tr>
+        <tr>
+          <td>35%</td>
+          <td>40%</td>
+          <td>5%</td>
+          <td>5%</td>
+          <td>10%</td>
+          <td>5%</td>
+          <td>100%</td>
+        </tr>
+      </table>
+    ''';
+    final w1 = EclassService.parseSyllabusWeightsHtml(inha65Html, '2577');
+    final sum1 = w1.fold<double>(0, (acc, e) => acc + e.percentage);
+    expect(sum1, 100.0);
+    expect(w1.any((e) => e.label == 'Midterm' && e.percentage == 35.0), isTrue);
+
+    const inha60Html = '''
+      <table>
+        <tr><th>Mid-Term Exam</th><th>Final Exam</th><th>Discussion</th><th>Total</th></tr>
+        <tr><td>40</td><td>50</td><td>10</td><td>100</td></tr>
+      </table>
+    ''';
+    final w2 = EclassService.parseSyllabusWeightsHtml(inha60Html, '2566');
+    final sum2 = w2.fold<double>(0, (acc, e) => acc + e.percentage);
+    expect(sum2, 100.0);
+    expect(w2.firstWhere((e) => e.label == 'Midterm').percentage, 40.0);
+  });
+
+  test('Assignment treats graded offline items as completed and sorts pending recent-first',
+      () {
+    const offlineExam = Assignment(
+      id: '2566::14199',
+      assignId: 14199,
+      courseId: '2566',
+      courseName: 'Engineering Mathematics',
+      name: 'Mid Exam',
+      due: '',
+      dueTimestamp: 0,
+      status: 'No submission',
+      grade: '24',
+      gradeMax: '30',
+    );
+    expect(offlineExam.isSubmitted, isTrue);
+    expect(offlineExam.isGradedOnly, isTrue);
+
+    final now = 1795000000;
+    final items = [
+      Assignment(
+        id: '1',
+        assignId: 1,
+        courseId: '1',
+        courseName: 'A',
+        name: 'Undated Task',
+        due: '',
+        dueTimestamp: 0,
+        status: 'No submission',
+      ),
+      Assignment(
+        id: '2',
+        assignId: 2,
+        courseId: '1',
+        courseName: 'A',
+        name: 'Older Overdue',
+        due: '01.11.2026',
+        dueTimestamp: now - 86400 * 10,
+        status: 'No submission',
+      ),
+      Assignment(
+        id: '3',
+        assignId: 3,
+        courseId: '1',
+        courseName: 'A',
+        name: 'Upcoming Next',
+        due: '25.11.2026',
+        dueTimestamp: now + 3600,
+        status: 'No submission',
+      ),
+      Assignment(
+        id: '4',
+        assignId: 4,
+        courseId: '1',
+        courseName: 'A',
+        name: 'Recent Overdue',
+        due: '15.11.2026',
+        dueTimestamp: now - 3600,
+        status: 'No submission',
+      ),
+    ];
+    final sorted = Assignment.sortForDisplay(
+      items,
+      pendingMode: true,
+      nowSec: now,
+    );
+    expect(
+      sorted.map((e) => e.name).toList(),
+      ['Upcoming Next', 'Recent Overdue', 'Older Overdue', 'Undated Task'],
+    );
+  });
+
+  test('GpaCalculator computes 4.5-scale semester and projected cumulative GPA',
+      () {
+    final res = GpaCalculator.calculate(
+      currentGpa: 3.96,
+      completedCredits: 96,
+      courses: const [
+        GpaCourseEntry(name: 'Algo', credits: 3, letter: 'A+'), // 13.5
+        GpaCourseEntry(name: 'Math', credits: 3, letter: 'A0'), // 12.0
+        GpaCourseEntry(name: 'Seminar', credits: 2, letter: 'P'), // excluded
+      ],
+    );
+    expect(res.semesterGradedCredits, 6);
+    expect(res.semesterTotalCredits, 8);
+    expect(res.semesterGpa, closeTo(4.25, 0.001));
+    expect(res.projectedCumulativeGpa, closeTo((3.96 * 96 + 25.5) / 102, 0.001));
+    expect(res.totalCredits, 104);
+
+    final overall = GpaCalculator.calculateWeightedCoursePercent(const [
+      GpaCategorySlider(label: 'Midterm', weightPct: 40, scorePct: 67.5),
+      GpaCategorySlider(label: 'Project', weightPct: 10, scorePct: 100.0),
+      GpaCategorySlider(label: 'Final', weightPct: 50, scorePct: 80.0),
+    ]);
+    expect(overall, closeTo(77.0, 0.001));
+  });
+
+  testWidgets('GpaCalculatorScreen category sliders & manual grade slider work without header letter badge',
+      (tester) async {
+    final app = FakeAppState();
+    await tester.pumpWidget(
+      _wrap(
+        app,
+        GpaCalculatorScreen(
+          focusedCourse: app.courses.first,
+          focusedGrades: app.gradesByCourse['101'] ?? const [],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('gpa_sim_overall_pct')), findsOneWidget);
+    expect(find.byKey(const ValueKey('gpa_cat_slider_0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('gpa_cat_slider_1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('gpa_cat_slider_2')), findsOneWidget);
+    expect(find.byKey(const ValueKey('gpa_sim_grade_slider')), findsOneWidget);
+    expect(find.text('Auto'), findsOneWidget);
+
+    final pctBefore = tester
+        .widget<Text>(find.byKey(const ValueKey('gpa_sim_overall_pct')))
+        .data;
+    final catSlider2 = find.byKey(const ValueKey('gpa_cat_slider_2'));
+    await tester.ensureVisible(catSlider2);
+    await tester.pumpAndSettle();
+    await tester.drag(catSlider2, const Offset(-180, 0));
+    await tester.pumpAndSettle();
+    final pctAfter = tester
+        .widget<Text>(find.byKey(const ValueKey('gpa_sim_overall_pct')))
+        .data;
+    expect(pctAfter, isNot(equals(pctBefore)));
+
+    final gradeSlider = find.byKey(const ValueKey('gpa_sim_grade_slider'));
+    await tester.ensureVisible(gradeSlider);
+    await tester.pumpAndSettle();
+    await tester.drag(gradeSlider, const Offset(220, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Manual'), findsOneWidget);
+  });
+
+  testWidgets('AssignmentDetailScreen shows No comment from instructor when graded without feedback',
+      (tester) async {
+    final app = FakeAppState();
+    const gradedNoComment = Assignment(
+      id: '2566::14199',
+      assignId: 14199,
+      courseId: '2566',
+      courseName: 'Engineering Mathematics',
+      name: 'Mid Exam',
+      due: '',
+      dueTimestamp: 0,
+      status: 'No submission',
+      grade: '24',
+      gradeMax: '30',
+      feedbackComment: '',
+    );
+    await tester.pumpWidget(
+      _wrap(app, const AssignmentDetailScreen(assignment: gradedNoComment)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No comment from instructor'), findsOneWidget);
+    expect(find.text('No deadline set'), findsNothing);
+    expect(find.text('Graded'), findsAtLeastNWidgets(1));
+  });
+
+  testWidgets('GpaCalculatorScreen updates projected GPA interactively on grade tap',
+      (tester) async {
+    final app = FakeAppState();
+    await tester.pumpWidget(_wrap(app, const GpaCalculatorScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('GPA Calculator'), findsOneWidget);
+    final projectedFinder =
+        find.byKey(const ValueKey('gpa_calc_projected_value'));
+    final initialCum = tester.widget<Text>(projectedFinder).data;
+
+    final verticalScroll = find.byWidgetPredicate(
+      (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+    );
+    final aPlusPill = find.byKey(const ValueKey('gpa_grade_0_A+'));
+    await tester.scrollUntilVisible(aPlusPill, 200, scrollable: verticalScroll);
+    await tester.ensureVisible(aPlusPill);
+    await tester.pumpAndSettle();
+    await tester.tap(aPlusPill);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      projectedFinder,
+      -200,
+      scrollable: verticalScroll,
+    );
+    await tester.ensureVisible(projectedFinder);
+    await tester.pumpAndSettle();
+    final updatedCum = tester.widget<Text>(projectedFinder).data;
+    expect(updatedCum, isNot(equals(initialCum)));
+  });
+
+  testWidgets('Cross-navigation: Courses GPA -> INS tab & Timetable -> CourseDetail',
+      (tester) async {
+    final app = FakeAppState();
+    await tester.pumpWidget(_wrap(app, const CoursesScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('courses_glance_card')));
+    await tester.pumpAndSettle();
+    expect(app.activeTabIndex, 3);
+
+    await tester.pumpWidget(_wrap(app, const TimetableScreen()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Data Structure').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Course Detail'), findsOneWidget);
+    expect(find.text('Data Structures & Algorithms'), findsOneWidget);
+  });
+
+  testWidgets('WidgetGalleryScreen & SettingsScreen v1.1.0 controls render',
+      (tester) async {
+    final app = FakeAppState();
+    await tester.pumpWidget(_wrap(app, const WidgetGalleryScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Next Lecture Glance'), findsOneWidget);
+    expect(find.byKey(const ValueKey('pin_widget_next_lecture')), findsOneWidget);
+    expect(find.byKey(const ValueKey('pin_widget_ins_academic')), findsOneWidget);
+
+    await tester.pumpWidget(_wrap(app, const SettingsScreen()));
+    await tester.pumpAndSettle();
+    expect(find.text('Haptic feedback'), findsOneWidget);
+    expect(find.text('Home Screen Widgets'), findsOneWidget);
+
+    final testNotifBtn = find.byKey(const ValueKey('test_notifications_btn'));
+    await tester.scrollUntilVisible(
+      testNotifBtn,
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(testNotifBtn);
+    await tester.pumpAndSettle();
+    expect(find.text('Test Notifications'), findsOneWidget);
+
+    await tester.tap(testNotifBtn);
+    await tester.pumpAndSettle();
+    expect(find.text('Notification Diagnostics'), findsOneWidget);
+    expect(find.text('Classes'), findsOneWidget);
+    expect(find.text('Deadlines'), findsOneWidget);
+    expect(find.text('Scheduled'), findsOneWidget);
+    expect(find.byKey(const ValueKey('notif_test_10s_btn')), findsOneWidget);
+
+    Navigator.of(tester.element(find.text('Notification Diagnostics'))).pop();
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('check_updates_btn')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Check for updates'), findsOneWidget);
+    expect(find.text('Current version v1.1.0 • GitHub Releases'), findsOneWidget);
   });
 }

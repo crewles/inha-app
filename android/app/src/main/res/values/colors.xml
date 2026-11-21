@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_bg">#FFFFFF</color>
+    <color name="widget_surface_low">#F2F3FF</color>
+    <color name="widget_divider">#E2E7FF</color>
+    <color name="widget_text">#131B2E</color>
+    <color name="widget_text_muted">#434655</color>
+    <color name="widget_primary">#0037B0</color>
+    <color name="widget_primary_fixed">#DCE1FF</color>
+    <color name="widget_on_primary_fixed">#001551</color>
+    <color name="widget_secondary_fixed">#CCE5FF</color>
+    <color name="widget_on_secondary_fixed">#001D31</color>
+    <color name="widget_error_container">#FFDAD6</color>
+    <color name="widget_on_error_container">#93000A</color>
+    <color name="widget_dot_urgent">#DC2626</color>
+    <color name="widget_dot_soon">#EA580C</color>
+    <color name="widget_dot_normal">#16A34A</color>
+    <color name="widget_hero_start">#0037B0</color>
+    <color name="widget_hero_end">#006398</color>
+</resources>

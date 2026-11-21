@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../l10n/strings.dart';
+import 'app_haptics.dart';
 
 class ExpressiveCard extends StatelessWidget {
   final Widget child;
@@ -8,6 +9,7 @@ class ExpressiveCard extends StatelessWidget {
   final double borderRadius;
   final Color? color;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final BorderSide? borderSide;
 
   const ExpressiveCard({
@@ -17,6 +19,7 @@ class ExpressiveCard extends StatelessWidget {
     this.borderRadius = 24,
     this.color,
     this.onTap,
+    this.onLongPress,
     this.borderSide,
   });
 
@@ -58,9 +61,10 @@ class ExpressiveCard extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: radius,
         clipBehavior: Clip.antiAlias,
-        child: onTap != null
+        child: (onTap != null || onLongPress != null)
             ? InkWell(
                 onTap: onTap,
+                onLongPress: onLongPress,
                 borderRadius: radius,
                 child: Padding(padding: padding, child: child),
               )
@@ -110,6 +114,7 @@ class ExpressivePill extends StatelessWidget {
   final FontWeight fontWeight;
   final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final double fontSize;
 
   const ExpressivePill({
@@ -121,6 +126,7 @@ class ExpressivePill extends StatelessWidget {
     this.fontWeight = FontWeight.w600,
     this.padding = const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
     this.onTap,
+    this.onLongPress,
     this.fontSize = 11.5,
   });
 
@@ -155,8 +161,8 @@ class ExpressivePill extends StatelessWidget {
       color: backgroundColor,
       shape: const StadiumBorder(),
       clipBehavior: Clip.antiAlias,
-      child: onTap != null
-          ? InkWell(onTap: onTap, child: content)
+      child: (onTap != null || onLongPress != null)
+          ? InkWell(onTap: onTap, onLongPress: onLongPress, child: content)
           : content,
     );
   }
@@ -216,7 +222,10 @@ class ExpressiveSegmentedControl<T> extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               onTap: () {
-                if (!isSelected) onChanged(seg.value);
+                if (!isSelected) {
+                  AppHaptics.selection();
+                  onChanged(seg.value);
+                }
               },
               borderRadius: BorderRadius.circular(999),
               child: AnimatedContainer(
@@ -478,12 +487,16 @@ class HeroGradientCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
   final double borderRadius;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   const HeroGradientCard({
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(20),
     this.borderRadius = 28,
+    this.onTap,
+    this.onLongPress,
   });
 
   static Color _ensureDarkStop(Color candidate, Color fallbackDeep) {
@@ -508,6 +521,36 @@ class HeroGradientCard extends StatelessWidget {
         ? Color.lerp(cs.secondaryContainer, const Color(0xFF004C7A), 0.55)!
         : _ensureDarkStop(cs.secondary, const Color(0xFF006398));
 
+    final inner = Stack(
+      children: [
+        Positioned(
+          right: -28,
+          top: -28,
+          child: Container(
+            width: 140,
+            height: 140,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.1),
+            ),
+          ),
+        ),
+        Positioned(
+          left: -24,
+          bottom: -36,
+          child: Container(
+            width: 116,
+            height: 116,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.08),
+            ),
+          ),
+        ),
+        Padding(padding: padding, child: child),
+      ],
+    );
+
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(borderRadius),
@@ -526,35 +569,19 @@ class HeroGradientCard extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(borderRadius),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -28,
-              top: -28,
-              child: Container(
-                width: 140,
-                height: 140,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.1),
+        child: (onTap != null || onLongPress != null)
+            ? Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onTap,
+                  onLongPress: onLongPress,
+                  borderRadius: BorderRadius.circular(borderRadius),
+                  splashColor: Colors.white.withValues(alpha: 0.16),
+                  highlightColor: Colors.white.withValues(alpha: 0.08),
+                  child: inner,
                 ),
-              ),
-            ),
-            Positioned(
-              left: -24,
-              bottom: -36,
-              child: Container(
-                width: 116,
-                height: 116,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.08),
-                ),
-              ),
-            ),
-            Padding(padding: padding, child: child),
-          ],
-        ),
+              )
+            : inner,
       ),
     );
   }
@@ -736,4 +763,49 @@ String formatPersonName(String raw) {
     if (!isAllUpper && !isAllLower) return word;
     return word.split('-').map(titleSegment).join('-');
   }).join(' ');
+}
+
+void showQuickToast(
+  BuildContext context,
+  String message, {
+  String? actionLabel,
+  VoidCallback? onAction,
+  Duration duration = const Duration(milliseconds: 1800),
+}) {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  if (messenger == null) return;
+  messenger.clearSnackBars();
+  final cs = Theme.of(context).colorScheme;
+  messenger.showSnackBar(
+    SnackBar(
+      duration: duration,
+      behavior: SnackBarBehavior.floating,
+      dismissDirection: DismissDirection.horizontal,
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      content: (actionLabel != null && onAction != null)
+          ? Row(
+              children: [
+                Expanded(child: Text(message)),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor: cs.inversePrimary,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () {
+                    messenger.hideCurrentSnackBar();
+                    onAction();
+                  },
+                  child: Text(
+                    actionLabel,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            )
+          : Text(message),
+    ),
+  );
 }

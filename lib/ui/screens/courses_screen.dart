@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/models.dart';
 import '../../services/eclass_service.dart';
+import '../../services/timetable_service.dart';
 import '../../state/app_state.dart';
+import '../widgets/app_haptics.dart';
+import '../widgets/expressive_sheets.dart';
 import '../widgets/expressive_widgets.dart';
 import 'course_detail_screen.dart';
 
@@ -23,18 +27,8 @@ class CoursesScreen extends StatelessWidget {
       Icons.layers_rounded,
       Icons.menu_book_rounded,
     ];
-    final idx = course.id.hashCode.abs() % 4;
     final icon = icons[course.id.hashCode.abs() % icons.length];
-    switch (idx) {
-      case 0:
-        return (cs.primaryFixed, cs.onPrimaryFixed, icon);
-      case 1:
-        return (cs.secondaryFixed, cs.onSecondaryFixed, icon);
-      case 2:
-        return (cs.surfaceContainerHigh, cs.primary, icon);
-      default:
-        return (cs.tertiaryFixed, cs.onTertiaryFixed, icon);
-    }
+    return (cs.primaryFixed, cs.onPrimaryFixed, icon);
   }
 
   @override
@@ -54,7 +48,8 @@ class CoursesScreen extends StatelessWidget {
     final insGpa = formatGpa(app.insData?.gpaInfo['gpa'] ?? '');
 
     final visibleIds = visible.map((c) => c.id).toSet();
-    final totalPending = app.allAssignments
+    final activeAssigns = app.activeAssignments;
+    final totalPending = activeAssigns
         .where((a) => visibleIds.contains(a.courseId) && !a.isSubmitted)
         .length;
 
@@ -114,6 +109,55 @@ class CoursesScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
             ],
+            if (app.availableUpdate != null && !app.updateBannerDismissed) ...[
+              ExpressiveCard(
+                borderRadius: 20,
+                color: cs.primaryFixed,
+                padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+                onTap: () {
+                  AppHaptics.light();
+                  showUpdateAvailableSheet(context, app.availableUpdate!);
+                },
+                child: Row(
+                  children: [
+                    Icon(Icons.system_update_rounded,
+                        color: cs.onPrimaryFixed, size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            s.updateAvailableBadge(
+                                app.availableUpdate!.version),
+                            style: tt.labelLarge?.copyWith(
+                              color: cs.onPrimaryFixed,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            s.updateAvailableTitle,
+                            style: tt.labelSmall?.copyWith(
+                              color: cs.onPrimaryFixedVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(Icons.close_rounded,
+                          size: 18, color: cs.onPrimaryFixed),
+                      onPressed: () {
+                        AppHaptics.selection();
+                        app.dismissUpdateBanner();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             if (hasPastCourses) ...[
               ExpressiveSegmentedControl<bool>(
                 activeColor: cs.primaryContainer,
@@ -132,6 +176,7 @@ class CoursesScreen extends StatelessWidget {
             if (insGpa.isNotEmpty || visible.isNotEmpty) ...[
               _buildGlanceCard(
                 context: context,
+                app: app,
                 cs: cs,
                 tt: tt,
                 s: s,
@@ -171,9 +216,10 @@ class CoursesScreen extends StatelessWidget {
               for (int i = 0; i < visible.length; i++) ...[
                 _buildCourseCard(
                   context: context,
+                  app: app,
                   course: visible[i],
                   schedule: app.courseScheduleFor(visible[i]),
-                  pendingCount: app.allAssignments
+                  pendingCount: activeAssigns
                       .where(
                           (a) => a.courseId == visible[i].id && !a.isSubmitted)
                       .length,
@@ -213,6 +259,7 @@ class CoursesScreen extends StatelessWidget {
 
   Widget _buildGlanceCard({
     required BuildContext context,
+    required AppState app,
     required ColorScheme cs,
     required TextTheme tt,
     required dynamic s,
@@ -224,8 +271,13 @@ class CoursesScreen extends StatelessWidget {
     final numericGpa = double.tryParse(insGpa) != null;
 
     return ExpressiveCard(
+      key: const ValueKey('courses_glance_card'),
       borderRadius: 24,
       padding: const EdgeInsets.all(16),
+      onTap: () {
+        AppHaptics.light();
+        app.openTab(hasGpa ? 3 : 1);
+      },
       child: Row(
         children: [
           SquircleIcon(
@@ -288,6 +340,12 @@ class CoursesScreen extends StatelessWidget {
                 ? cs.onErrorContainer
                 : cs.onSurfaceVariant,
           ),
+          const SizedBox(width: 4),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: 18,
+            color: cs.onSurfaceVariant,
+          ),
         ],
       ),
     );
@@ -295,6 +353,7 @@ class CoursesScreen extends StatelessWidget {
 
   Widget _buildCourseCard({
     required BuildContext context,
+    required AppState app,
     required Course course,
     required CourseScheduleInfo? schedule,
     required int pendingCount,
@@ -314,16 +373,13 @@ class CoursesScreen extends StatelessWidget {
     IconData statusIcon;
     String statusText;
 
-    if (pendingCount >= 2) {
-      statusBg = cs.errorContainer;
-      statusFg = cs.onErrorContainer;
-      statusIcon = Icons.schedule_rounded;
+    if (pendingCount > 0) {
+      statusBg = cs.primaryFixed;
+      statusFg = cs.onPrimaryFixed;
+      statusIcon = pendingCount >= 2
+          ? Icons.schedule_rounded
+          : Icons.assignment_late_outlined;
       statusText = s.tasksDueCount(pendingCount);
-    } else if (pendingCount == 1) {
-      statusBg = cs.tertiaryFixed;
-      statusFg = cs.onTertiaryFixed;
-      statusIcon = Icons.assignment_late_outlined;
-      statusText = s.tasksDueCount(1);
     } else {
       statusBg = cs.surfaceContainerHigh;
       statusFg = cs.onSurfaceVariant;
@@ -331,14 +387,19 @@ class CoursesScreen extends StatelessWidget {
       statusText = s.allCaughtUp;
     }
 
+    void openCourse({int tab = 0}) {
+      AppHaptics.light();
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CourseDetailScreen(course: course, initialTab: tab),
+        ),
+      );
+    }
+
     return ExpressiveCard(
       borderRadius: 24,
       padding: const EdgeInsets.all(16),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => CourseDetailScreen(course: course),
-        ),
-      ),
+      onTap: () => openCourse(tab: 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -379,58 +440,83 @@ class CoursesScreen extends StatelessWidget {
                             backgroundColor: cs.surfaceContainerHigh,
                             foregroundColor: cs.primary,
                             fontWeight: FontWeight.w700,
+                            onTap: () => openCourse(tab: 1),
                           ),
                         ],
                       ],
                     ),
                     if (professor.isNotEmpty) ...[
                       const SizedBox(height: 5),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.person_outline_rounded,
-                            size: 14,
-                            color: cs.primary,
-                          ),
-                          const SizedBox(width: 5),
-                          Expanded(
-                            child: Text(
-                              professor,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: tt.bodySmall?.copyWith(
-                                color: cs.onSurfaceVariant,
-                                fontWeight: FontWeight.w600,
+                      GestureDetector(
+                        onLongPress: () async {
+                          AppHaptics.medium();
+                          await Clipboard.setData(
+                              ClipboardData(text: professor));
+                          if (context.mounted) {
+                            showQuickToast(context, s.copiedToast(professor));
+                          }
+                        },
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.person_outline_rounded,
+                              size: 14,
+                              color: cs.primary,
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                professor,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: tt.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
                     if (classroom.isNotEmpty || slots.isNotEmpty) ...[
                       const SizedBox(height: 3),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.meeting_room_outlined,
-                            size: 14,
-                            color: cs.secondary,
-                          ),
-                          const SizedBox(width: 5),
-                          Expanded(
-                            child: Text(
-                              [
-                                if (classroom.isNotEmpty) classroom,
-                                if (slots.isNotEmpty) slots,
-                              ].join(' • '),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: tt.bodySmall?.copyWith(
-                                color: cs.onSurfaceVariant,
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () {
+                          AppHaptics.light();
+                          app.openTab(
+                            2,
+                            timetableDay:
+                                TimetableService.firstDayIndex(schedule),
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.meeting_room_outlined,
+                                size: 14,
+                                color: cs.secondary,
                               ),
-                            ),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  [
+                                    if (classroom.isNotEmpty) classroom,
+                                    if (slots.isNotEmpty) slots,
+                                  ].join(' • '),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: tt.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ],
                     if (!course.isCurrent) ...[
@@ -466,6 +552,7 @@ class CoursesScreen extends StatelessWidget {
                     backgroundColor: statusBg,
                     foregroundColor: statusFg,
                     fontWeight: FontWeight.w700,
+                    onTap: () => openCourse(tab: 0),
                   ),
                 ),
                 const SizedBox(width: 8),

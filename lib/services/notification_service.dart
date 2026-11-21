@@ -24,7 +24,7 @@ class NotificationService {
       _tashkent = tz.getLocation('Asia/Tashkent');
       tz.setLocalLocation(_tashkent);
 
-      const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const androidInit = AndroidInitializationSettings('@drawable/ic_stat_inha');
       const initSettings = InitializationSettings(android: androidInit);
       await _plugin.initialize(initSettings);
 
@@ -33,6 +33,113 @@ class NotificationService {
       await androidPlugin?.requestNotificationsPermission();
       _initialized = true;
     } catch (_) {}
+  }
+
+  Future<void> showGradeNotification({
+    required int id,
+    required String title,
+    required String body,
+  }) =>
+      showNotification(
+        id: id,
+        title: title,
+        body: body,
+        channelId: 'inha_grades',
+        channelName: 'Grade Updates',
+      );
+
+  Future<bool?> areNotificationsEnabled() async {
+    if (!_initialized) await init();
+    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    return androidPlugin?.areNotificationsEnabled();
+  }
+
+  Future<bool?> requestPermission() async {
+    if (!_initialized) await init();
+    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    return androidPlugin?.requestNotificationsPermission();
+  }
+
+  Future<List<PendingNotificationRequest>> getPendingNotifications() async {
+    if (!_initialized) await init();
+    return _plugin.pendingNotificationRequests();
+  }
+
+  Future<bool?> canScheduleExactAlarms() async {
+    if (!_initialized) await init();
+    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    return androidPlugin?.canScheduleExactNotifications();
+  }
+
+  Future<bool?> requestExactAlarmPermission() async {
+    if (!_initialized) await init();
+    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    return androidPlugin?.requestExactAlarmsPermission();
+  }
+
+  Future<(AndroidScheduleMode mode, bool exact)> _resolveScheduleMode({
+    bool requestIfDenied = false,
+  }) async {
+    try {
+      final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      var canExact =
+          await androidPlugin?.canScheduleExactNotifications() ?? false;
+      if (!canExact && requestIfDenied) {
+        await androidPlugin?.requestExactAlarmsPermission();
+        canExact =
+            await androidPlugin?.canScheduleExactNotifications() ?? false;
+      }
+      if (canExact) {
+        return (AndroidScheduleMode.exactAllowWhileIdle, true);
+      }
+    } catch (_) {}
+    return (AndroidScheduleMode.inexactAllowWhileIdle, false);
+  }
+
+  Future<void> sendInstantTestNotification({required bool isRu}) async {
+    await showNotification(
+      id: 9001,
+      title: isRu ? 'Тест уведомлений Inha App' : 'Inha App Notification Test',
+      body: isRu
+          ? 'Уведомления работают корректно!'
+          : 'Notifications are working properly!',
+    );
+  }
+
+  Future<bool> scheduleDelayedTestNotification({
+    required bool isRu,
+    int delaySeconds = 10,
+  }) async {
+    if (!_initialized) await init();
+    final (mode, exact) = await _resolveScheduleMode(requestIfDenied: true);
+    final fireAt =
+        tz.TZDateTime.now(_tashkent).add(Duration(seconds: delaySeconds));
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'inha_updates',
+        'Inha App Updates',
+        importance: Importance.high,
+        priority: Priority.high,
+      ),
+    );
+    await _plugin.zonedSchedule(
+      9002,
+      isRu ? 'Отложенный тест ($delaySecondsс)' : 'Delayed Test (${delaySeconds}s)',
+      isRu
+          ? 'Запланированные будильники в фоне работают!'
+          : 'Scheduled background reminders are working!',
+      fireAt,
+      details,
+      androidScheduleMode: mode,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+    );
+    return exact;
   }
 
   Future<void> showNotification({
@@ -82,6 +189,7 @@ class NotificationService {
       ),
     );
 
+    final (scheduleMode, _) = await _resolveScheduleMode();
     int nextId = 1000;
     final now = tz.TZDateTime.now(_tashkent);
 
@@ -111,7 +219,11 @@ class NotificationService {
           scheduled = scheduled.add(const Duration(days: 1));
         }
 
-        final room = e.classrooms.isEmpty ? '—' : e.classrooms.join(', ');
+        final cleanedRooms = e.classrooms
+            .map(TimetableService.cleanClassroomName)
+            .where((r) => r.isNotEmpty)
+            .toList();
+        final room = cleanedRooms.isEmpty ? '—' : cleanedRooms.join(', ');
         final title = isRu
             ? 'Пара через $offsetMinutes мин: ${e.subject}'
             : 'Class in $offsetMinutes min: ${e.subject}';
@@ -124,7 +236,7 @@ class NotificationService {
             body,
             scheduled,
             details,
-            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            androidScheduleMode: scheduleMode,
             uiLocalNotificationDateInterpretation:
                 UILocalNotificationDateInterpretation.absoluteTime,
             matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
@@ -158,6 +270,7 @@ class NotificationService {
       ),
     );
 
+    final (scheduleMode, _) = await _resolveScheduleMode();
     final now = tz.TZDateTime.now(_tashkent);
     int nextId = 2000;
 
@@ -190,7 +303,7 @@ class NotificationService {
             body,
             fireAt,
             details,
-            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            androidScheduleMode: scheduleMode,
             uiLocalNotificationDateInterpretation:
                 UILocalNotificationDateInterpretation.absoluteTime,
           );

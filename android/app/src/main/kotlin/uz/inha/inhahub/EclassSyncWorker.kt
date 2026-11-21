@@ -24,6 +24,7 @@ class EclassSyncWorker(
 
         var token: String? = null
         val knownAssignmentIds = HashSet<String>()
+        val hiddenAssignmentIds = HashSet<String>()
         val currentCourseIds = ArrayList<String>()
 
         try {
@@ -42,6 +43,14 @@ class EclassSyncWorker(
                     while (c.moveToNext()) {
                         knownAssignmentIds.add(c.getString(0))
                     }
+                }
+                try {
+                    sqlite.rawQuery("SELECT assignment_id FROM hidden_assignments", null).use { c ->
+                        while (c.moveToNext()) {
+                            c.getString(0)?.let { hiddenAssignmentIds.add(it) }
+                        }
+                    }
+                } catch (_: Exception) {
                 }
                 sqlite.rawQuery("SELECT id FROM courses WHERE is_current = 1", null).use { c ->
                     while (c.moveToNext()) {
@@ -103,7 +112,7 @@ class EclassSyncWorker(
                     val aid = a.optInt("id", 0)
                     val aname = a.optString("name", "").trim()
                     val key = "$cid::$aid"
-                    if (aid > 0 && !knownAssignmentIds.contains(key)) {
+                    if (aid > 0 && !knownAssignmentIds.contains(key) && !hiddenAssignmentIds.contains(key)) {
                         newItems.add(Pair(cname, aname))
                     }
                 }
@@ -112,6 +121,7 @@ class EclassSyncWorker(
             if (newItems.isNotEmpty()) {
                 showNotification(newItems)
             }
+            WidgetUpdater.updateAll(applicationContext)
         } catch (_: Exception) {
             return Result.retry()
         }
@@ -135,7 +145,7 @@ class EclassSyncWorker(
         val text = if (items.size == 1) items[0].second else items.take(3).joinToString(", ") { it.second }
 
         val notification = NotificationCompat.Builder(applicationContext, channelId)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_inha)
             .setContentTitle(title)
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_HIGH)

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:path/path.dart' as p;
@@ -282,6 +283,13 @@ class EclassService {
 
   // ── Courses (JSON API + current semester detection) ─────────
 
+  String _unescapeText(String raw) {
+    if (!raw.contains('&')) return raw.trim();
+    return (html_parser.parseFragment(raw).text ?? raw)
+        .replaceAll('\u00A0', ' ')
+        .trim();
+  }
+
   String _extractProfessor(dom.Element link) {
     dom.Element? node = link.parent;
     for (var depth = 0; depth < 4 && node != null; depth++) {
@@ -364,7 +372,7 @@ class EclassService {
           for (final c in rawCourses) {
             final cid = c['id'].toString();
             final rawName =
-                (c['fullname'] ?? c['shortname'] ?? '').toString().trim();
+                _unescapeText((c['fullname'] ?? c['shortname'] ?? '').toString());
             final cleanName =
                 rawName.replaceAll(RegExp(r'\[.*?\]'), '').trim();
             final cat = (c['category'] as int?) ?? 0;
@@ -403,7 +411,7 @@ class EclassService {
       final courseId = href.split('id=').last.split('&').first.trim();
       if (courseId.isEmpty || seen.contains(courseId)) continue;
       final h3 = a.querySelector('h3');
-      final rawName = (h3 ?? a).text.trim();
+      final rawName = _unescapeText((h3 ?? a).text);
       final name = rawName.replaceAll(RegExp(r'\[.*?\]'), '').trim();
       if (name.isEmpty) continue;
       seen.add(courseId);
@@ -419,8 +427,22 @@ class EclassService {
 
   // ── Assignments (Fast JSON API + Status + HTML fallback) ────
 
+  String _htmlToPlainText(String rawHtml) {
+    if (rawHtml.trim().isEmpty) return '';
+    final normalized = rawHtml
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(
+            RegExp(r'</(p|div|li|tr|h[1-6])>', caseSensitive: false), '\n');
+    final text = html_parser.parseFragment(normalized).text ?? '';
+    return text
+        .replaceAll('\u00A0', ' ')
+        .replaceAll(RegExp(r'[ \t]+\n'), '\n')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim();
+  }
+
   /// Fetches ALL assignments for the given courseIds (or all enrolled courses if empty)
-  /// in a single Moodle API call, then enriches submission status & grade.
+  /// in a single Moodle API call, then enriches submission status, files, intro & grade.
   Future<List<Assignment>> getAssignmentsViaApi({
     List<String>? courseIds,
     Map<String, String>? courseNamesById,
@@ -441,17 +463,24 @@ class EclassService {
 
     for (final c in res['courses'] as List) {
       final cid = c['id'].toString();
-      final rawCName = (courseNamesById?[cid] ?? c['fullname'] ?? c['shortname'] ?? '')
-          .toString()
+      final rawCName = _unescapeText(
+              (courseNamesById?[cid] ?? c['fullname'] ?? c['shortname'] ?? '')
+                  .toString())
           .replaceAll(RegExp(r'\[.*?\]'), '')
           .trim();
 
       for (final a in (c['assignments'] as List?) ?? []) {
         final assignId = int.tryParse(a['id'].toString()) ?? 0;
         final cmid = a['cmid']?.toString();
-        final name = (a['name'] ?? '').toString().trim();
+        final name = _unescapeText((a['name'] ?? '').toString());
         final dueTs = (a['duedate'] as int?) ?? 0;
+        final cutoffTs = (a['cutoffdate'] as int?) ?? 0;
         final dueStr = dueTs > 0 ? _formatUnixDate(dueTs) : '';
+        final intro = _htmlToPlainText((a['intro'] ?? '').toString());
+        final rawMaxGrade = num.tryParse(a['grade']?.toString() ?? '');
+        final maxPoints = (rawMaxGrade != null && rawMaxGrade > 0)
+            ? _trimZeros(rawMaxGrade.toString())
+            : null;
 
         final attachments = <AssignmentFile>[];
         for (final att in (a['introattachments'] as List?) ?? []) {
@@ -468,6 +497,9 @@ class EclassService {
         String status = 'No submission';
         String? grade;
         String? gradeMax;
+        final submittedFiles = <AssignmentFile>[];
+        var feedbackComment = '';
+        var isGradedFlag = false;
 
         if (fetchStatus && assignId > 0) {
           try {
@@ -480,30 +512,77 @@ class EclassService {
               if (last is Map) {
                 final sub = last['submission'];
                 final subStatus = sub is Map ? sub['status']?.toString() : null;
-                final graded = last['graded'] == true;
+                isGradedFlag = last['graded'] == true;
                 if (subStatus == 'submitted') {
-                  status = graded ? 'Submitted (Graded)' : 'Submitted for grading';
+                  status = isGradedFlag
+                      ? 'Submitted (Graded)'
+                      : 'Submitted for grading';
                 } else if (subStatus == 'draft') {
                   status = 'Draft (not submitted)';
                 } else {
-                  status = 'No submission';
+                  status = isGradedFlag ? 'Graded' : 'No submission';
+                }
+
+                if (sub is Map) {
+                  for (final pl in (sub['plugins'] as List?) ?? []) {
+                    if (pl is! Map || pl['type'] != 'file') continue;
+                    for (final fa in (pl['fileareas'] as List?) ?? []) {
+                      if (fa is! Map) continue;
+                      for (final f in (fa['files'] as List?) ?? []) {
+                        if (f is! Map) continue;
+                        final furl = f['fileurl']?.toString() ?? '';
+                        if (furl.isNotEmpty) {
+                          submittedFiles.add(AssignmentFile(
+                            name: (f['filename'] ?? 'file').toString(),
+                            link: furl,
+                            size: (f['filesize'] as int?) ?? 0,
+                          ));
+                        }
+                      }
+                    }
+                  }
                 }
               }
               final fb = st['feedback'];
-              if (fb is Map && fb['gradefordisplay'] != null) {
-                final rawGrade = html_parser
-                    .parseFragment(fb['gradefordisplay'].toString())
-                    .text
-                    ?.replaceAll('\u00A0', ' ')
-                    .trim();
-                if (rawGrade != null && rawGrade.isNotEmpty && rawGrade != '-') {
-                  final m = RegExp(r'([\d.]+)\s*/\s*([\d.]+)').firstMatch(rawGrade);
-                  if (m != null) {
-                    grade = _trimZeros(m.group(1)!);
-                    gradeMax = _trimZeros(m.group(2)!);
-                  } else {
-                    grade = rawGrade;
+              if (fb is Map) {
+                if (fb['gradefordisplay'] != null) {
+                  final rawGrade = html_parser
+                      .parseFragment(fb['gradefordisplay'].toString())
+                      .text
+                      ?.replaceAll('\u00A0', ' ')
+                      .trim();
+                  if (rawGrade != null &&
+                      rawGrade.isNotEmpty &&
+                      rawGrade != '-') {
+                    final m =
+                        RegExp(r'([\d.]+)\s*/\s*([\d.]+)').firstMatch(rawGrade);
+                    if (m != null) {
+                      grade = _trimZeros(m.group(1)!);
+                      gradeMax = _trimZeros(m.group(2)!);
+                    } else {
+                      grade = rawGrade;
+                    }
                   }
+                }
+                for (final pl in (fb['plugins'] as List?) ?? []) {
+                  if (pl is! Map || pl['type'] != 'comments') continue;
+                  for (final ef in (pl['editorfields'] as List?) ?? []) {
+                    if (ef is! Map) continue;
+                    final parsed =
+                        _htmlToPlainText((ef['text'] ?? '').toString());
+                    if (parsed.isNotEmpty) {
+                      feedbackComment = feedbackComment.isEmpty
+                          ? parsed
+                          : '$feedbackComment\n$parsed';
+                    }
+                  }
+                }
+              }
+              if (grade != null && grade.isNotEmpty) {
+                if (status == 'Submitted for grading') {
+                  status = 'Submitted (Graded)';
+                } else if (status == 'No submission') {
+                  status = 'Graded';
                 }
               }
             }
@@ -523,6 +602,11 @@ class EclassService {
           gradeMax: gradeMax,
           url: cmid != null ? '$baseUrl/mod/assign/view.php?id=$cmid' : null,
           files: attachments,
+          intro: intro,
+          maxPoints: maxPoints,
+          cutoffTimestamp: cutoffTs,
+          submittedFiles: submittedFiles,
+          feedbackComment: feedbackComment,
           updatedAt: nowMs,
         ));
       }
@@ -622,6 +706,9 @@ class EclassService {
         .replaceAll('Учитывать пустые оценки.', '')
         .replaceAll('Aggregate only non-empty grades.', '')
         .replaceAll('Include empty grades.', '')
+        .replaceAll('Simple weighted mean of grades.', '')
+        .replaceAll('Weighted mean of grades.', '')
+        .replaceAll('Natural.', '')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
   }
@@ -669,21 +756,27 @@ class EclassService {
             final rowClasses = row.classes;
             final isLevel1 = itemClasses.contains('level1') ||
                 rowClasses.contains('level1');
-            final isTotal = itemClasses.contains('baggt') ||
-                rowClasses.contains('baggt') ||
-                (isLevel1 &&
-                    (itemClasses.contains('baggb') ||
-                        rowClasses.contains('baggb'))) ||
-                name.toLowerCase() == 'course total' ||
-                name.toLowerCase() == 'итого за курс' ||
-                name.contains('강좌 총점');
+            final lowerName = name.toLowerCase();
+            final isExplicitCourseTotal =
+                lowerName.startsWith('course total') ||
+                    lowerName.startsWith('итого за курс') ||
+                    name.contains('강좌 총점');
 
-            final isSum = !isTotal &&
-                (itemClasses.contains('baggb') ||
-                    rowClasses.contains('baggb') ||
-                    RegExp(r'\bSUM$', caseSensitive: false).hasMatch(name) ||
-                    name.toLowerCase().contains('category total') ||
-                    name.contains('합계'));
+            final isSum = !isExplicitCourseTotal &&
+                (RegExp(r'\bSUM$', caseSensitive: false).hasMatch(name) ||
+                    lowerName.contains('category total') ||
+                    name.contains('합계') ||
+                    (!isLevel1 &&
+                        (itemClasses.contains('baggb') ||
+                            rowClasses.contains('baggb'))));
+
+            final isTotal = isExplicitCourseTotal ||
+                (!isSum &&
+                    (itemClasses.contains('baggt') ||
+                        rowClasses.contains('baggt') ||
+                        (isLevel1 &&
+                            (itemClasses.contains('baggb') ||
+                                rowClasses.contains('baggb')))));
 
             final isCategoryFolder = !isTotal &&
                 !isSum &&
@@ -1213,4 +1306,270 @@ class EclassService {
 
   static String syllabusUrl(String courseId) =>
       '$baseUrl/local/ubion/setting/syllabus.php?id=$courseId';
+
+  // ── Syllabus Evaluation Weights Parser ──────────────────────
+
+  static const _weightKeywords = <String, String>{
+    'attendance': 'Attendance',
+    'attend': 'Attendance',
+    '출석': 'Attendance',
+    'midtermexam': 'Midterm',
+    'midterm': 'Midterm',
+    'midexam': 'Midterm',
+    '중간고사': 'Midterm',
+    '중간': 'Midterm',
+    'finalexam': 'Final',
+    'finalterm': 'Final',
+    'final': 'Final',
+    '기말고사': 'Final',
+    '기말': 'Final',
+    'assignments': 'Assignments',
+    'assignment': 'Assignments',
+    'homework': 'Assignments',
+    'report': 'Assignments',
+    '과제': 'Assignments',
+    'quizzes': 'Quiz',
+    'quiz': 'Quiz',
+    '퀴즈': 'Quiz',
+    'termproject': 'Project',
+    'teamproject': 'Project',
+    'project': 'Project',
+    '프로젝트': 'Project',
+    'laboratory': 'Lab',
+    'labwork': 'Lab',
+    'lab': 'Lab',
+    'practice': 'Lab',
+    'practical': 'Lab',
+    'experiment': 'Lab',
+    '실습': 'Lab',
+    '실험': 'Lab',
+    'presentation': 'Presentation',
+    'seminar': 'Presentation',
+    '발표': 'Presentation',
+    'discussion': 'Discussion',
+    'debate': 'Discussion',
+    '토론': 'Discussion',
+    'participation': 'Participation',
+    'activity': 'Participation',
+    '참여': 'Participation',
+    'others': 'Other',
+    'other': 'Other',
+    'etc': 'Other',
+    '기타': 'Other',
+  };
+
+  static String _normalizeWeightKey(String raw) {
+    return raw
+        .replaceAll('\u00A0', ' ')
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\s\-–—_./()\[\]:,]+'), '');
+  }
+
+  static bool _isTotalOrMetaHeader(String raw) {
+    final cleaned = raw.replaceAll('\u00A0', ' ').trim();
+    if (cleaned.isEmpty || cleaned.length > 48) return true;
+    final lower = cleaned.toLowerCase();
+    final norm = _normalizeWeightKey(cleaned);
+    if (norm.isEmpty) return true;
+    if (norm == '계' ||
+        norm == '비율' ||
+        norm == '구분' ||
+        norm == '항목' ||
+        norm == '점수') {
+      return true;
+    }
+    return lower.contains('total') ||
+        norm == 'sum' ||
+        lower.contains('합계') ||
+        lower.contains('총계') ||
+        lower.contains('evaluation') ||
+        norm == 'ratio' ||
+        norm == 'category' ||
+        norm == 'item';
+  }
+
+  static String? _matchWeightLabel(String raw) {
+    if (_isTotalOrMetaHeader(raw)) return null;
+    final norm = _normalizeWeightKey(raw);
+    for (final entry in _weightKeywords.entries) {
+      if (norm.contains(entry.key)) return entry.value;
+    }
+    return null;
+  }
+
+  static String? _cleanCustomWeightLabel(String raw) {
+    if (_isTotalOrMetaHeader(raw)) return null;
+    var cleaned = raw
+        .replaceAll('\u00A0', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    cleaned = cleaned.replaceAll(RegExp(r'^[:\-•]+|[:\-•]+$'), '').trim();
+    if (cleaned.isEmpty || cleaned.length > 28) return null;
+    if (!RegExp(r'[A-Za-z가-힣А-Яа-я]').hasMatch(cleaned)) return null;
+    if (RegExp(r'^[0-9.,%\s]+$').hasMatch(cleaned)) return null;
+    return cleaned;
+  }
+
+  static double? _extractWeightPercent(String raw) {
+    final cleaned = raw.replaceAll('\u00A0', ' ').trim();
+    if (cleaned.isEmpty) return null;
+    final m = RegExp(r'^([0-9]+(?:[.,][0-9]+)?)\s*%?$').firstMatch(cleaned);
+    if (m == null) return null;
+    final val = double.tryParse(m.group(1)!.replaceAll(',', '.'));
+    if (val == null || val <= 0 || val > 100) return null;
+    return val;
+  }
+
+  static List<SyllabusWeight> _pickBestCandidate(
+    List<List<SyllabusWeight>> candidates,
+  ) {
+    List<SyllabusWeight>? best;
+    double bestScore = double.infinity;
+    for (final cand in candidates) {
+      if (cand.length < 2) continue;
+      final sum = cand.fold<double>(0, (acc, e) => acc + e.percentage);
+      if (sum < 50 || sum > 105) continue;
+      final near100Penalty = (sum >= 95 && sum <= 105) ? 0.0 : 50.0;
+      final score = (sum - 100.0).abs() + near100Penalty - cand.length * 0.01;
+      if (score < bestScore) {
+        bestScore = score;
+        best = cand;
+      }
+    }
+    return best ?? const [];
+  }
+
+  @visibleForTesting
+  static List<SyllabusWeight> parseSyllabusWeightsHtml(
+    String html,
+    String courseId,
+  ) {
+    if (html.trim().isEmpty) return const [];
+    final doc = html_parser.parse(html);
+    final candidates = <List<SyllabusWeight>>[];
+
+    // 1. Scan tables (horizontal header+row with rowspan support, or vertical key-value rows)
+    for (final table in doc.querySelectorAll('table')) {
+      final rows = table.querySelectorAll('tr');
+      if (rows.length < 2) continue;
+
+      // Pass A: Horizontal layout
+      for (int r = 0; r < rows.length - 1; r++) {
+        final rawHeaders = rows[r].querySelectorAll('th, td');
+        final valCells = rows[r + 1].querySelectorAll('td, th');
+        if (rawHeaders.length < 2 || valCells.length < 2) continue;
+
+        final headerVariants = <List<dom.Element>>[rawHeaders];
+        if (rawHeaders.length > valCells.length) {
+          final withoutRowspan = rawHeaders.where((cell) {
+            final rs = int.tryParse(cell.attributes['rowspan'] ?? '1') ?? 1;
+            return rs <= 1;
+          }).toList();
+          if (withoutRowspan.length >= 2) {
+            headerVariants.insert(0, withoutRowspan);
+          }
+          headerVariants.add(
+            rawHeaders.sublist(rawHeaders.length - valCells.length),
+          );
+        }
+
+        for (final headerCells in headerVariants) {
+          final len = headerCells.length < valCells.length
+              ? headerCells.length
+              : valCells.length;
+          int knownCount = 0;
+          final items = <SyllabusWeight>[];
+          for (int c = 0; c < len; c++) {
+            final headerText = headerCells[c].text;
+            final known = _matchWeightLabel(headerText);
+            final pct = _extractWeightPercent(valCells[c].text);
+            if (pct == null) continue;
+            if (known != null) {
+              knownCount++;
+              items.add(SyllabusWeight(
+                courseId: courseId,
+                label: known,
+                percentage: pct,
+              ));
+            } else {
+              final custom = _cleanCustomWeightLabel(headerText);
+              if (custom != null) {
+                items.add(SyllabusWeight(
+                  courseId: courseId,
+                  label: custom,
+                  percentage: pct,
+                ));
+              }
+            }
+          }
+          if (knownCount >= 2 && items.length >= 2) {
+            candidates.add(items);
+          }
+        }
+      }
+
+      // Pass B: Vertical layout (each row has label in col 0 and percentage in col 1..k)
+      int verticalKnownCount = 0;
+      final verticalMatched = <SyllabusWeight>[];
+      for (final row in rows) {
+        final cells = row.querySelectorAll('th, td');
+        if (cells.length < 2) continue;
+        final known = _matchWeightLabel(cells[0].text);
+        final label = known ?? _cleanCustomWeightLabel(cells[0].text);
+        if (label == null) continue;
+        double? pct;
+        for (int c = 1; c < cells.length; c++) {
+          pct = _extractWeightPercent(cells[c].text);
+          if (pct != null) break;
+        }
+        if (pct != null) {
+          if (known != null) verticalKnownCount++;
+          verticalMatched.add(SyllabusWeight(
+            courseId: courseId,
+            label: label,
+            percentage: pct,
+          ));
+        }
+      }
+      if (verticalKnownCount >= 2 && verticalMatched.length >= 2) {
+        candidates.add(verticalMatched);
+      }
+    }
+
+    final bestFromTable = _pickBestCandidate(candidates);
+    if (bestFromTable.isNotEmpty) return bestFromTable;
+
+    // 2. Inline text fallback: "Mid-term: 35%", "Final (40%)"
+    final bodyText = (doc.body?.text ?? html).replaceAll('\u00A0', ' ');
+    final inline = <String, SyllabusWeight>{};
+    final rx = RegExp(
+      r'([A-Za-z가-힣][A-Za-z가-힣\s\-]{1,22}?)\s*[:\(\-]?\s*([0-9]+(?:\.[0-9]+)?)\s*%',
+    );
+    for (final m in rx.allMatches(bodyText)) {
+      final label = _matchWeightLabel(m.group(1) ?? '');
+      final pct = double.tryParse(m.group(2) ?? '');
+      if (label != null && pct != null && pct > 0 && pct <= 100) {
+        inline.putIfAbsent(
+          label,
+          () => SyllabusWeight(
+            courseId: courseId,
+            label: label,
+            percentage: pct,
+          ),
+        );
+      }
+    }
+    return _pickBestCandidate([inline.values.toList()]);
+  }
+
+  Future<List<SyllabusWeight>> getSyllabusWeights(String courseId) async {
+    try {
+      final resp = await _getAuthedHtml(syllabusUrl(courseId));
+      if (_isLoginPage(resp.finalUri, resp.data ?? '')) return const [];
+      return parseSyllabusWeightsHtml(resp.data ?? '', courseId);
+    } catch (_) {
+      return const [];
+    }
+  }
 }

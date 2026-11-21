@@ -2,18 +2,30 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/models.dart';
 import '../../services/eclass_service.dart';
+import '../../services/timetable_service.dart';
 import '../../state/app_state.dart';
+import '../widgets/app_haptics.dart';
+import '../widgets/assignment_card.dart';
+import '../widgets/expressive_sheets.dart';
 import '../widgets/expressive_widgets.dart';
+import 'assignment_detail_screen.dart';
+import 'gpa_calculator_screen.dart';
 
 class CourseDetailScreen extends StatefulWidget {
   final Course course;
-  const CourseDetailScreen({super.key, required this.course});
+  final int initialTab;
+  const CourseDetailScreen({
+    super.key,
+    required this.course,
+    this.initialTab = 0,
+  });
 
   @override
   State<CourseDetailScreen> createState() => _CourseDetailScreenState();
@@ -40,7 +52,11 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(
+      length: 4,
+      initialIndex: widget.initialTab.clamp(0, 3),
+      vsync: this,
+    );
     _tabController.addListener(_onTabChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final app = context.read<AppState>();
@@ -80,9 +96,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
       await OpenFilex.open(path);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
+        showQuickToast(context, e.toString());
       }
     } finally {
       if (mounted) setState(() => _downloadingUrls.remove(file.url));
@@ -99,9 +113,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
       await OpenFilex.open(path);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
+        showQuickToast(context, e.toString());
       }
     } finally {
       if (mounted) setState(() => _downloadingUrls.remove(att.link));
@@ -120,9 +132,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
       if (!mounted) return;
 
       setState(() => _uploadingAssignIds.add(assignId));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.uploading)),
-      );
+      showQuickToast(context, s.uploading);
 
       await app.eclass.uploadSubmission(
         assignId,
@@ -131,16 +141,12 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.uploadSuccess)),
-        );
+        showQuickToast(context, s.uploadSuccess);
         _refresh();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
+        showQuickToast(context, e.toString());
       }
     } finally {
       if (mounted) setState(() => _uploadingAssignIds.remove(assignId));
@@ -155,9 +161,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
       final openList = await app.eclass.getOpenAssignments(widget.course.id);
       if (!mounted) return;
       if (openList.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.noAssignments)),
-        );
+        showQuickToast(context, s.noAssignments);
         return;
       }
 
@@ -190,9 +194,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
       if (picked == null || picked.files.single.path == null) return;
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.uploading)),
-      );
+      showQuickToast(context, s.uploading);
 
       await app.eclass.uploadSubmission(
         chosen.id,
@@ -201,16 +203,12 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.uploadSuccess)),
-        );
+        showQuickToast(context, s.uploadSuccess);
         _refresh();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
+        showQuickToast(context, e.toString());
       }
     }
   }
@@ -242,9 +240,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
         }
       }
       if (mounted && firstError != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(firstError)),
-        );
+        showQuickToast(context, firstError);
       }
     } finally {
       if (mounted) {
@@ -268,6 +264,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
         .where((a) => a.courseId == widget.course.id)
         .toList();
     final grades = app.gradesByCourse[widget.course.id] ?? [];
+    final syllabusWeights =
+        app.syllabusWeightsByCourse[widget.course.id] ?? const [];
     final attendance = app.attendanceByCourse[widget.course.id];
     final files = app.filesByCourse[widget.course.id] ?? [];
 
@@ -430,57 +428,79 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                     runSpacing: 8,
                     children: [
                       if (professor.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
-                          decoration: BoxDecoration(
-                            color: cs.surfaceContainerLow,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              InitialsAvatar(name: professor, size: 22),
-                              const SizedBox(width: 8),
-                              Flexible(
-                                child: Text(
-                                  professor,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: tt.labelMedium?.copyWith(
-                                    color: cs.onSurface,
-                                    fontWeight: FontWeight.w600,
+                        GestureDetector(
+                          onLongPress: () async {
+                            AppHaptics.medium();
+                            await Clipboard.setData(
+                                ClipboardData(text: professor));
+                            if (context.mounted) {
+                              showQuickToast(context, s.copiedToast(professor));
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                InitialsAvatar(name: professor, size: 22),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    professor,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: tt.labelMedium?.copyWith(
+                                      color: cs.onSurface,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       if (scheduleParts.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: cs.surfaceContainer,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.schedule_rounded,
-                                  size: 15, color: cs.primary),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  scheduleParts.join(' • '),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: tt.labelSmall?.copyWith(
-                                    color: cs.onSurfaceVariant,
-                                    fontWeight: FontWeight.w600,
+                        Material(
+                          color: cs.surfaceContainer,
+                          shape: const StadiumBorder(),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: () {
+                              AppHaptics.light();
+                              Navigator.of(context).pop();
+                              app.openTab(
+                                2,
+                                timetableDay:
+                                    TimetableService.firstDayIndex(schedule),
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.schedule_rounded,
+                                      size: 15, color: cs.primary),
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: Text(
+                                      scheduleParts.join(' • '),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: tt.labelSmall?.copyWith(
+                                        color: cs.onSurfaceVariant,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         ),
                     ],
@@ -514,13 +534,16 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                                     borderRadius: BorderRadius.circular(999),
                                     clipBehavior: Clip.antiAlias,
                                     child: InkWell(
-                                      onTap: () => _tabController.animateTo(i),
+                                      onTap: () {
+                                        AppHaptics.selection();
+                                        _tabController.animateTo(i);
+                                      },
                                       borderRadius: BorderRadius.circular(999),
                                       child: AnimatedContainer(
                                         duration:
                                             const Duration(milliseconds: 180),
                                         padding: const EdgeInsets.symmetric(
-                                            horizontal: 12, vertical: 8),
+                                            horizontal: 7, vertical: 8),
                                         decoration: BoxDecoration(
                                           color: selected
                                               ? cs.primary
@@ -533,15 +556,16 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                                           children: [
                                             Icon(
                                               tabIcon,
-                                              size: 16,
+                                              size: 14,
                                               color: selected
                                                   ? cs.onPrimary
                                                   : cs.onSurfaceVariant,
                                             ),
-                                            const SizedBox(width: 5),
+                                            const SizedBox(width: 3),
                                             Text(
                                               tabLabel,
                                               style: tt.labelMedium?.copyWith(
+                                                fontSize: 12,
                                                 color: selected
                                                     ? cs.onPrimary
                                                     : cs.onSurfaceVariant,
@@ -571,8 +595,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildAssignmentsTab(context, assignments, cs, tt, s),
-                _buildGradesTab(context, grades, cs, tt, s),
+                _buildAssignmentsTab(context, app, assignments, cs, tt, s),
+                _buildGradesTab(
+                    context, grades, syllabusWeights, cs, tt, s),
                 _buildAttendanceTab(context, attendance, cs, tt, s),
                 _buildFilesTab(context, files, cs, tt, s),
               ],
@@ -585,12 +610,13 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
 
   Widget _buildAssignmentsTab(
     BuildContext context,
-    List<Assignment> items,
+    AppState app,
+    List<Assignment> allCourseItems,
     ColorScheme cs,
     TextTheme tt,
     dynamic s,
   ) {
-    if (items.isEmpty) {
+    if (allCourseItems.isEmpty) {
       return Center(
         child: Text(
           s.noAssignments,
@@ -599,39 +625,71 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
       );
     }
 
-    final totalCount = items.length;
-    final gradedCount = items.where((a) => a.gradeDisplay != null).length;
-    final submittedOnlyCount =
-        items.where((a) => a.isSubmitted && a.gradeDisplay == null).length;
-    final doneCount = gradedCount + submittedOnlyCount;
+    final activeItems = allCourseItems
+        .where((a) => !app.isAssignmentHidden(a.id))
+        .toList();
+    final hiddenItems = allCourseItems
+        .where((a) => app.isAssignmentHidden(a.id))
+        .toList();
+    final effectiveFilter =
+        (_assignFilter == 'hidden' && hiddenItems.isEmpty)
+            ? 'all'
+            : _assignFilter;
+
+    final totalCount = activeItems.length;
+    final gradedCount =
+        activeItems.where((a) => a.gradeDisplay != null).length;
+    final submittedOnlyCount = activeItems
+        .where((a) => a.isSubmitted && a.gradeDisplay == null)
+        .length;
+    final doneCount = activeItems.where((a) => a.isSubmitted).length;
     final pendingCount = totalCount - doneCount;
     final pct = totalCount == 0 ? 0 : ((doneCount * 100) / totalCount).round();
     final progress = totalCount == 0 ? 0.0 : doneCount / totalCount;
 
-    final filtered = items.where((a) {
-      switch (_assignFilter) {
-        case 'pending':
-          return !a.isSubmitted;
-        case 'submitted':
-          return a.isSubmitted && a.gradeDisplay == null;
-        case 'graded':
-          return a.gradeDisplay != null;
-        default:
-          return true;
-      }
-    }).toList();
-
     final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final rawFiltered = effectiveFilter == 'hidden'
+        ? hiddenItems
+        : activeItems.where((a) {
+            switch (effectiveFilter) {
+              case 'pending':
+                return !a.isSubmitted;
+              case 'submitted':
+                return a.isSubmitted && a.gradeDisplay == null;
+              case 'graded':
+                return a.gradeDisplay != null;
+              default:
+                return true;
+            }
+          }).toList();
+    final filtered = Assignment.sortForDisplay(
+      rawFiltered,
+      pendingMode: effectiveFilter == 'pending',
+      nowSec: nowSec,
+    );
 
     return RefreshIndicator(
       onRefresh: _refresh,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
         children: [
-          // Top Stitch Progress Bento Card
+          // Top Stitch Progress Bento Card (tappable breakdown sheet)
           ExpressiveCard(
+            key: const ValueKey('cd_completion_card'),
             borderRadius: 24,
             padding: const EdgeInsets.all(16),
+            onTap: () {
+              AppHaptics.light();
+              showCompletionBreakdownSheet(
+                context,
+                activeAssignments: activeItems,
+                hiddenCount: hiddenItems.length,
+                courses: [widget.course],
+                scopedToCourse: true,
+                onSelectFilter: (id) => setState(() => _assignFilter = id),
+                onOpenCourse: (_) {},
+              );
+            },
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -760,10 +818,13 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                   chipKey: const ValueKey('cd_assign_filter_all'),
                   label: s.filterAll,
                   count: totalCount,
-                  selected: _assignFilter == 'all',
+                  selected: effectiveFilter == 'all',
                   cs: cs,
                   tt: tt,
-                  onTap: () => setState(() => _assignFilter = 'all'),
+                  onTap: () {
+                    AppHaptics.selection();
+                    setState(() => _assignFilter = 'all');
+                  },
                 ),
                 const SizedBox(width: 8),
                 _buildAssignFilterChip(
@@ -771,10 +832,13 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                   label: s.filterPending,
                   count: pendingCount,
                   dotColor: cs.tertiary,
-                  selected: _assignFilter == 'pending',
+                  selected: effectiveFilter == 'pending',
                   cs: cs,
                   tt: tt,
-                  onTap: () => setState(() => _assignFilter = 'pending'),
+                  onTap: () {
+                    AppHaptics.selection();
+                    setState(() => _assignFilter = 'pending');
+                  },
                 ),
                 const SizedBox(width: 8),
                 _buildAssignFilterChip(
@@ -782,10 +846,13 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                   label: s.filterSubmitted,
                   count: submittedOnlyCount,
                   dotColor: cs.secondary,
-                  selected: _assignFilter == 'submitted',
+                  selected: effectiveFilter == 'submitted',
                   cs: cs,
                   tt: tt,
-                  onTap: () => setState(() => _assignFilter = 'submitted'),
+                  onTap: () {
+                    AppHaptics.selection();
+                    setState(() => _assignFilter = 'submitted');
+                  },
                 ),
                 const SizedBox(width: 8),
                 _buildAssignFilterChip(
@@ -793,11 +860,29 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                   label: s.filterGraded,
                   count: gradedCount,
                   dotColor: cs.primary,
-                  selected: _assignFilter == 'graded',
+                  selected: effectiveFilter == 'graded',
                   cs: cs,
                   tt: tt,
-                  onTap: () => setState(() => _assignFilter = 'graded'),
+                  onTap: () {
+                    AppHaptics.selection();
+                    setState(() => _assignFilter = 'graded');
+                  },
                 ),
+                if (hiddenItems.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  _buildAssignFilterChip(
+                    chipKey: const ValueKey('cd_assign_filter_hidden'),
+                    label: s.hiddenFilter,
+                    count: hiddenItems.length,
+                    selected: effectiveFilter == 'hidden',
+                    cs: cs,
+                    tt: tt,
+                    onTap: () {
+                      AppHaptics.selection();
+                      setState(() => _assignFilter = 'hidden');
+                    },
+                  ),
+                ],
               ],
             ),
           ),
@@ -815,7 +900,28 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
             )
           else
             for (int i = 0; i < filtered.length; i++) ...[
-              _buildAssignmentCard(filtered[i], nowSec, cs, tt, s),
+              AssignmentCard(
+                assignment: filtered[i],
+                isHidden: effectiveFilter == 'hidden',
+                nowSec: nowSec,
+                showCoursePill: false,
+                downloadingLinks: _downloadingUrls,
+                isUploading: filtered[i].assignId != null &&
+                    _uploadingAssignIds.contains(filtered[i].assignId),
+                onTap: () {
+                  AppHaptics.light();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          AssignmentDetailScreen(assignment: filtered[i]),
+                    ),
+                  );
+                },
+                onDownloadAttachment: _downloadAttachment,
+                onSubmit: filtered[i].assignId != null
+                    ? () => _submitSingleAssignment(filtered[i])
+                    : null,
+              ),
               if (i != filtered.length - 1) const SizedBox(height: 12),
             ],
         ],
@@ -887,222 +993,6 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
     );
   }
 
-  Widget _buildAssignmentCard(
-    Assignment a,
-    int nowSec,
-    ColorScheme cs,
-    TextTheme tt,
-    dynamic s,
-  ) {
-    final uploading =
-        a.assignId != null && _uploadingAssignIds.contains(a.assignId);
-    final isOverdue =
-        !a.isSubmitted && a.dueTimestamp > 0 && a.dueTimestamp < nowSec;
-    final isUrgent = !a.isSubmitted &&
-        a.dueTimestamp > 0 &&
-        a.dueTimestamp >= nowSec &&
-        (a.dueTimestamp - nowSec) <= 48 * 3600;
-
-    final Color pillBg;
-    final Color pillFg;
-    final String pillLabel;
-    final IconData pillIcon;
-    if (a.gradeDisplay != null) {
-      pillBg = cs.primaryFixed;
-      pillFg = cs.onPrimaryFixed;
-      pillLabel = s.submitted;
-      pillIcon = Icons.verified_rounded;
-    } else if (a.isSubmitted) {
-      pillBg = cs.secondaryFixed;
-      pillFg = cs.onSecondaryFixed;
-      pillLabel = s.submitted;
-      pillIcon = Icons.check_circle_rounded;
-    } else if (isOverdue) {
-      pillBg = cs.errorContainer;
-      pillFg = cs.onErrorContainer;
-      pillLabel = s.overdueLabel;
-      pillIcon = Icons.error_outline_rounded;
-    } else if (isUrgent) {
-      pillBg = cs.tertiaryFixed;
-      pillFg = cs.onTertiaryFixed;
-      pillLabel = s.dueSoonLabel;
-      pillIcon = Icons.alarm_rounded;
-    } else {
-      pillBg = cs.surfaceContainerHigh;
-      pillFg = cs.onSurfaceVariant;
-      pillLabel = s.notSubmitted;
-      pillIcon = Icons.calendar_today_rounded;
-    }
-
-    return ExpressiveCard(
-      borderRadius: 24,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              ExpressivePill(
-                icon: pillIcon,
-                label: pillLabel,
-                backgroundColor: pillBg,
-                foregroundColor: pillFg,
-                fontWeight: FontWeight.w700,
-              ),
-              const Spacer(),
-              if (a.gradeDisplay != null)
-                ExpressivePill(
-                  label: a.gradeDisplay!,
-                  backgroundColor: cs.secondaryFixed,
-                  foregroundColor: cs.onSecondaryFixed,
-                  fontWeight: FontWeight.w800,
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SquircleIcon(
-                size: 44,
-                radius: 14,
-                iconSize: 22,
-                icon: a.isSubmitted
-                    ? Icons.assignment_turned_in_rounded
-                    : Icons.assignment_outlined,
-                backgroundColor:
-                    a.isSubmitted ? cs.secondaryFixed : cs.tertiaryFixed,
-                iconColor:
-                    a.isSubmitted ? cs.onSecondaryFixed : cs.onTertiaryFixed,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      a.name,
-                      style: tt.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                    if (a.due.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        '${s.dueLabel}: ${a.due}',
-                        style: tt.bodySmall?.copyWith(
-                          color: (isOverdue || isUrgent)
-                              ? cs.error
-                              : cs.onSurfaceVariant,
-                          fontWeight: (isOverdue || isUrgent)
-                              ? FontWeight.w600
-                              : FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (a.files.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final f in a.files)
-                  Material(
-                    color: cs.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(999),
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: _downloadingUrls.contains(f.link)
-                          ? null
-                          : () => _downloadAttachment(f),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 7),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _downloadingUrls.contains(f.link)
-                                ? SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: cs.primary,
-                                    ),
-                                  )
-                                : Icon(
-                                    iconForFileName(f.name),
-                                    size: 16,
-                                    color: colorForFileName(f.name, cs),
-                                  ),
-                            const SizedBox(width: 6),
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 160),
-                              child: Text(
-                                f.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: tt.labelSmall?.copyWith(
-                                  color: cs.onSurface,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            if (f.size > 0) ...[
-                              const SizedBox(width: 6),
-                              Text(
-                                formatFileSize(f.size),
-                                style: tt.labelSmall?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ],
-          if (!a.isSubmitted && a.assignId != null) ...[
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: uploading ? null : () => _submitSingleAssignment(a),
-                style: FilledButton.styleFrom(
-                  backgroundColor: cs.primary,
-                  foregroundColor: cs.onPrimary,
-                  shape: const StadiumBorder(),
-                  padding: const EdgeInsets.symmetric(vertical: 11),
-                ),
-                icon: Icon(
-                  uploading
-                      ? Icons.hourglass_top_rounded
-                      : Icons.cloud_upload_outlined,
-                  size: 18,
-                ),
-                label: Text(
-                  uploading ? s.uploading : s.submitSolution,
-                  style: tt.labelLarge?.copyWith(
-                    color: cs.onPrimary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
   double? _parsePercent(String raw) {
     final m = RegExp(r'([0-9]+(?:[.,][0-9]+)?)').firstMatch(raw);
     if (m == null) return null;
@@ -1130,11 +1020,12 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
   Widget _buildGradesTab(
     BuildContext context,
     List<GradeItem> grades,
+    List<SyllabusWeight> syllabusWeights,
     ColorScheme cs,
     TextTheme tt,
     dynamic s,
   ) {
-    if (grades.isEmpty) {
+    if (grades.isEmpty && syllabusWeights.isEmpty) {
       return Center(
         child: Text(
           s.noGrades,
@@ -1147,19 +1038,34 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
     final groupMap = <String, _GradeCategoryGroup>{};
 
     for (final g in grades) {
-      if (g.isTotal) {
-        totalItem ??= g;
+      final lowerName = g.name.toLowerCase();
+      final isExplicitCourseTotal =
+          lowerName.startsWith('course total') ||
+              lowerName.startsWith('итого за курс') ||
+              g.name.contains('강좌 총점');
+      final looksLikeCategorySum = !isExplicitCourseTotal &&
+          (g.isSum ||
+              RegExp(r'\bSUM$', caseSensitive: false).hasMatch(g.name) ||
+              lowerName.contains('category total') ||
+              g.name.contains('합계'));
+
+      if (g.isTotal && !looksLikeCategorySum) {
+        if (isExplicitCourseTotal) {
+          totalItem = g;
+        } else {
+          totalItem ??= g;
+        }
         continue;
       }
       final key = g.category.trim().isNotEmpty
           ? g.category.trim()
-          : (g.isSum
+          : (looksLikeCategorySum
               ? g.name
                   .replaceAll(RegExp(r'\s*\bSUM$', caseSensitive: false), '')
                   .trim()
               : g.name);
       final group = groupMap.putIfAbsent(key, () => _GradeCategoryGroup(key));
-      if (g.isSum) {
+      if (looksLikeCategorySum) {
         group.sumItem = g;
       } else {
         group.items.add(g);
@@ -1188,6 +1094,33 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
         ));
       }
     }
+    if (weightedGroups.isEmpty && syllabusWeights.isEmpty) {
+      for (int i = 0; i < groups.length; i++) {
+        double groupItemPct = 0;
+        for (final item in groups[i].items) {
+          final p = _parsePercent(item.weight);
+          if (p != null && p > 0) groupItemPct += p;
+        }
+        if (groupItemPct > 0) {
+          weightedGroups.add((
+            title: groups[i].title,
+            pct: groupItemPct,
+            color: palette[i % palette.length],
+          ));
+        }
+      }
+    }
+    var fromSyllabus = false;
+    if (weightedGroups.isEmpty && syllabusWeights.isNotEmpty) {
+      fromSyllabus = true;
+      for (int i = 0; i < syllabusWeights.length; i++) {
+        weightedGroups.add((
+          title: syllabusWeights[i].label,
+          pct: syllabusWeights[i].percentage,
+          color: palette[i % palette.length],
+        ));
+      }
+    }
     final weightSum =
         weightedGroups.fold<double>(0, (acc, item) => acc + item.pct);
 
@@ -1195,9 +1128,12 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
             totalItem!.percentage != '-')
         ? totalItem.percentage
         : (totalItem?.value ?? widget.course.overviewGrade ?? '-');
+    final cleanRange = (totalItem?.range ?? '')
+        .replaceFirst(RegExp(r'^0\s*[-–]\s*'), '')
+        .trim();
     final heroSubScore = totalItem != null && totalItem.value != heroPrimaryText
-        ? (totalItem.range.isNotEmpty
-            ? '${totalItem.value} / ${totalItem.range}'
+        ? (cleanRange.isNotEmpty && cleanRange != '0'
+            ? '${totalItem.value} / $cleanRange'
             : totalItem.value)
         : '';
 
@@ -1248,10 +1184,31 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        s.syllabusWeightsTitle,
-                        style: tt.labelMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
+                      Flexible(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                s.syllabusWeightsTitle,
+                                overflow: TextOverflow.ellipsis,
+                                style: tt.labelMedium?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                            if (fromSyllabus) ...[
+                              const SizedBox(width: 6),
+                              ExpressivePill(
+                                label: s.fromSyllabusBadge,
+                                backgroundColor: cs.secondaryFixed,
+                                foregroundColor: cs.onSecondaryFixed,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 7, vertical: 2),
+                                fontSize: 10,
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                       Text(
@@ -1324,6 +1281,93 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
             ),
             if (i != groups.length - 1) const SizedBox(height: 12),
           ],
+          const SizedBox(height: 14),
+          // Stitch #2 GPA Impact Simulator Callout Card
+          ExpressiveCard(
+            key: const ValueKey('cd_gpa_simulator_card'),
+            borderRadius: 24,
+            color: cs.surfaceContainerHigh,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: cs.primaryContainer,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.insights_rounded,
+                        size: 21,
+                        color: cs.onPrimaryContainer,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            s.gpaSimulatorTitle,
+                            style: tt.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            s.gpaSimulatorDesc,
+                            style: tt.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.tonalIcon(
+                    key: const ValueKey('cd_open_gpa_calc_btn'),
+                    onPressed: () {
+                      AppHaptics.light();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => GpaCalculatorScreen(
+                            focusedCourse: widget.course,
+                            focusedWeights: syllabusWeights,
+                            focusedGrades: grades,
+                          ),
+                        ),
+                      );
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: cs.surfaceContainerLowest,
+                      foregroundColor: cs.primary,
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                    ),
+                    icon: const Icon(Icons.calculate_rounded, size: 18),
+                    label: Text(
+                      s.calculateScenariosBtn,
+                      style: tt.labelLarge?.copyWith(
+                        color: cs.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

@@ -3,7 +3,11 @@ import 'package:provider/provider.dart';
 
 import '../../models/models.dart';
 import '../../state/app_state.dart';
+import '../widgets/app_haptics.dart';
+import '../widgets/expressive_sheets.dart';
 import '../widgets/expressive_widgets.dart';
+import 'course_detail_screen.dart';
+import 'gpa_calculator_screen.dart';
 
 class InsScreen extends StatefulWidget {
   const InsScreen({super.key});
@@ -71,28 +75,26 @@ class _InsScreenState extends State<InsScreen> {
   (IconData icon, Color bg, Color fg) _subjectStyle(
       InsCourseGrade c, ColorScheme cs) {
     final code = c.courseNumber.toUpperCase();
+    IconData icon = Icons.menu_book_rounded;
     if (code.startsWith('CSE') ||
         code.startsWith('SOC') ||
         code.startsWith('ICE') ||
         code.startsWith('CIS')) {
-      return (Icons.terminal_rounded, cs.primaryFixed, cs.onPrimaryFixed);
-    }
-    if (code.startsWith('MTH') ||
+      icon = Icons.terminal_rounded;
+    } else if (code.startsWith('MTH') ||
         code.startsWith('MAT') ||
         code.startsWith('STA')) {
-      return (Icons.functions_rounded, cs.surfaceContainerHigh, cs.onSurface);
-    }
-    if (code.startsWith('ENG') ||
+      icon = Icons.functions_rounded;
+    } else if (code.startsWith('ENG') ||
         code.startsWith('KOR') ||
         code.startsWith('HUM')) {
-      return (Icons.edit_note_rounded, cs.secondaryFixed, cs.onSecondaryFixed);
-    }
-    if (code.startsWith('PHY') ||
+      icon = Icons.edit_note_rounded;
+    } else if (code.startsWith('PHY') ||
         code.startsWith('CHM') ||
         code.startsWith('BIO')) {
-      return (Icons.science_outlined, cs.tertiaryFixed, cs.onTertiaryFixed);
+      icon = Icons.science_outlined;
     }
-    return (Icons.menu_book_rounded, cs.primaryFixed, cs.onPrimaryFixed);
+    return (icon, cs.primaryFixed, cs.onPrimaryFixed);
   }
 
   (Color bg, Color fg) _gradeBadgeColors(String grade, ColorScheme cs) {
@@ -253,9 +255,7 @@ class _InsScreenState extends State<InsScreen> {
       onRefresh: () async {
         final ok = await app.syncIns();
         if (!ok && context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(s.insLoadError)),
-          );
+          showQuickToast(context, s.insLoadError);
         }
       },
       child: ListView(
@@ -319,9 +319,7 @@ class _InsScreenState extends State<InsScreen> {
                 onPressed: () async {
                   final ok = await app.syncIns();
                   if (!ok && context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(s.insLoadError)),
-                    );
+                    showQuickToast(context, s.insLoadError);
                   }
                 },
               ),
@@ -495,6 +493,58 @@ class _InsScreenState extends State<InsScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 14),
+          ExpressiveCard(
+            key: const ValueKey('ins_gpa_calculator_card'),
+            borderRadius: 22,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            onTap: () {
+              AppHaptics.light();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const GpaCalculatorScreen(),
+                ),
+              );
+            },
+            child: Row(
+              children: [
+                SquircleIcon(
+                  size: 44,
+                  radius: 14,
+                  iconSize: 22,
+                  icon: Icons.calculate_rounded,
+                  backgroundColor: cs.primaryFixed,
+                  iconColor: cs.onPrimaryFixed,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        s.gpaCalculatorTitle,
+                        style: tt.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        s.gpaCalculatorSub,
+                        style: tt.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 20,
+                  color: cs.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
           if (semesters.isNotEmpty) ...[
             const SizedBox(height: 18),
             Row(
@@ -557,6 +607,8 @@ class _InsScreenState extends State<InsScreen> {
           const SizedBox(height: 10),
           for (int i = 0; i < visible.length; i++) ...[
             _buildCourseGradeCard(
+              context: context,
+              app: app,
               c: visible[i],
               showSemester: effectiveSemester == '__ALL__',
               cs: cs,
@@ -607,6 +659,8 @@ class _InsScreenState extends State<InsScreen> {
   }
 
   Widget _buildCourseGradeCard({
+    required BuildContext context,
+    required AppState app,
     required InsCourseGrade c,
     required bool showSemester,
     required ColorScheme cs,
@@ -627,6 +681,20 @@ class _InsScreenState extends State<InsScreen> {
     return ExpressiveCard(
       borderRadius: 20,
       padding: const EdgeInsets.all(14),
+      onTap: () {
+        AppHaptics.light();
+        final matched = app.findCourseForSubject(c.title);
+        if (matched != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) =>
+                  CourseDetailScreen(course: matched, initialTab: 1),
+            ),
+          );
+        } else {
+          showTranscriptInfoSheet(context, c);
+        }
+      },
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -415,4 +415,71 @@ class TimetableService {
     }
     return levels;
   }
+
+  /// Reverse-matches an EduPage or INS [subjectName] to an enrolled eClass [Course].
+  static Course? matchSubjectToCourse(String subjectName, List<Course> courses) {
+    if (subjectName.trim().isEmpty || courses.isEmpty) return null;
+    final subjNorm = _normalizeSubject(subjectName);
+    if (subjNorm.isEmpty) return null;
+    final subjTokens = _tokenizeSubject(subjNorm);
+    final subjLevels = _extractLevels(subjNorm);
+
+    Course? best;
+    double bestScore = 0;
+
+    for (final c in courses) {
+      final courseNorm = _normalizeSubject(c.name);
+      if (courseNorm.isEmpty) continue;
+      final courseLevels = _extractLevels(courseNorm);
+      if (subjLevels.isNotEmpty &&
+          courseLevels.isNotEmpty &&
+          subjLevels.join(',') != courseLevels.join(',')) {
+        continue;
+      }
+
+      double score = 0;
+      if (courseNorm == subjNorm) {
+        score = 1.0;
+      } else {
+        final courseTokens = _tokenizeSubject(courseNorm);
+        if (courseTokens.isNotEmpty && subjTokens.isNotEmpty) {
+          final overlap =
+              courseTokens.where((t) => subjTokens.contains(t)).length;
+          final maxLen = courseTokens.length > subjTokens.length
+              ? courseTokens.length
+              : subjTokens.length;
+          score = overlap / maxLen;
+          if (score < 0.55 &&
+              (courseNorm.contains(subjNorm) || subjNorm.contains(courseNorm))) {
+            final minTokens = courseTokens.length < subjTokens.length
+                ? courseTokens.length
+                : subjTokens.length;
+            if (minTokens >= 1 && overlap == minTokens) {
+              score = 0.72;
+            }
+          }
+        }
+      }
+
+      if (score >= 0.55) {
+        final weighted = score + (c.isCurrent ? 0.05 : 0.0);
+        if (weighted > bestScore) {
+          bestScore = weighted;
+          best = c;
+        }
+      }
+    }
+    return best;
+  }
+
+  /// Returns weekday index (`0 = Mon .. 4 = Fri`) of the course's first slot.
+  static int? firstDayIndex(CourseScheduleInfo? info) {
+    if (info == null || info.daySummaries.isEmpty) return null;
+    for (final s in info.daySummaries) {
+      final token = s.trim().split(' ').first;
+      final idx = dayOrder[token];
+      if (idx != null) return idx;
+    }
+    return null;
+  }
 }
