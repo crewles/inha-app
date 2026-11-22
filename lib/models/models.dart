@@ -141,9 +141,16 @@ class Assignment {
 
   bool get hasGrade => grade != null && grade!.trim().isNotEmpty;
 
+  bool get isDraft {
+    final s = status.toLowerCase();
+    return s.contains('draft') || s.contains('черновик');
+  }
+
   bool get isSubmitted {
     if (hasGrade) return true;
+    if (isDraft) return false;
     final s = status.toLowerCase();
+    if (s.contains('not submitted') || s.contains('не сдано')) return false;
     return s.contains('submitted') ||
         s.contains('сдано') ||
         s.contains('отправлено') ||

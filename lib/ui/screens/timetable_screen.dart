@@ -319,7 +319,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     )
                   else
                     for (int i = 0; i < dayEntries.length; i++) ...[
-                      _buildLessonRow(context, app, dayEntries[i], i, cs, tt, s),
+                      _buildLessonRow(context, app, dayEntries[i], cs, tt, s),
                       if (i != dayEntries.length - 1)
                         const SizedBox(height: 12),
                     ],
@@ -472,18 +472,14 @@ class _TimetableScreenState extends State<TimetableScreen> {
     BuildContext context,
     AppState app,
     ScheduleEntry e,
-    int index,
     ColorScheme cs,
     TextTheme tt,
     dynamic s,
   ) {
-    final isFirst = index == 0;
-    final timeBg = isFirst ? cs.surfaceContainerHigh : cs.surfaceContainer;
-    final startColor = isFirst ? cs.primary : cs.onSurface;
-    final roomBg =
-        isFirst ? cs.surfaceContainer : cs.secondaryFixed;
-    final roomFg =
-        isFirst ? cs.primary : cs.onSecondaryFixed;
+    final timeBg = cs.surfaceContainer;
+    final startColor = cs.onSurface;
+    final roomBg = cs.secondaryFixed;
+    final roomFg = cs.onSecondaryFixed;
     final roomsText =
         e.classrooms.map(TimetableService.cleanClassroomName).join(', ');
 
@@ -573,7 +569,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                         Icon(
                           Icons.person_outline_rounded,
                           size: 16,
-                          color: isFirst ? cs.primary : cs.secondary,
+                          color: cs.secondary,
                         ),
                         const SizedBox(width: 6),
                         Expanded(

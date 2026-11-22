@@ -11,6 +11,112 @@ import '../widgets/expressive_widgets.dart';
 class WidgetGalleryScreen extends StatelessWidget {
   const WidgetGalleryScreen({super.key});
 
+  // Matches android/app/src/main/res/values/colors.xml 1:1.
+  static const Color _wBg = Color(0xFF171B26);
+  static const Color _wRowBg = Color(0xFF222838);
+  static const Color _wBorder = Color(0xFF2F374E);
+  static const Color _wText = Color(0xFFEEF0FF);
+  static const Color _wMuted = Color(0xFF9BA5C0);
+  static const Color _wPrimary = Color(0xFFB7C4FF);
+  static const Color _wPillPrimaryBg = Color(0xFF28458A);
+  static const Color _wPillPrimaryFg = Color(0xFFDCE1FF);
+  static const Color _wPillSecondaryBg = Color(0xFF1E4368);
+  static const Color _wPillSecondaryFg = Color(0xFFCCE5FF);
+  static const Color _wPillErrorBg = Color(0xFF691B22);
+  static const Color _wPillErrorFg = Color(0xFFFFDAD6);
+  static const Color _wDotUrgent = Color(0xFFF87171);
+  static const Color _wDotSoon = Color(0xFFFB923C);
+  static const Color _wDotNormal = Color(0xFF4ADE80);
+  static const List<Color> _wHeroColors = [
+    Color(0xFF202F58),
+    Color(0xFF223A66),
+    Color(0xFF234D69),
+  ];
+
+  static Widget _nativeWidgetCard({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _wBg,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: _wBorder, width: 1),
+      ),
+      child: child,
+    );
+  }
+
+  static Widget _nativePill({
+    required String label,
+    required Color backgroundColor,
+    required Color foregroundColor,
+    double fontSize = 11,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: foregroundColor,
+          fontSize: fontSize,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  static Widget _nativeHeroCard({required Widget child}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: _wHeroColors,
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: -28,
+              right: -28,
+              child: Container(
+                width: 136,
+                height: 136,
+                decoration: const BoxDecoration(
+                  color: Color(0x16FFFFFF),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            Positioned(
+              left: -24,
+              bottom: -34,
+              child: Container(
+                width: 112,
+                height: 112,
+                decoration: const BoxDecoration(
+                  color: Color(0x16FFFFFF),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: child,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _pinWidget(
     BuildContext context,
     String key,
@@ -51,6 +157,7 @@ class WidgetGalleryScreen extends StatelessWidget {
       app.activeAssignments.where((a) => !a.isSubmitted).toList(),
       pendingMode: true,
     );
+    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
     return Scaffold(
       appBar: ExpressiveAppBar(
@@ -67,16 +174,14 @@ class WidgetGalleryScreen extends StatelessWidget {
           ),
           const SizedBox(height: 18),
 
-          // 1. Next Lecture Glance (4x2) — Stitch #11
+          // 1. Next Lecture Glance (4x2) — matches widget_next_lecture.xml
           _widgetSection(
             context: context,
             title: s.widgetNextLectureTitle,
             subtitle: s.widgetNextLectureDesc,
             sizeLabel: '4×2',
             widgetKey: 'next_lecture',
-            preview: HeroGradientCard(
-              borderRadius: 22,
-              padding: const EdgeInsets.all(16),
+            preview: _nativeHeroCard(
               child: next == null
                   ? Row(
                       children: [
@@ -88,8 +193,9 @@ class WidgetGalleryScreen extends StatelessWidget {
                             group.isEmpty
                                 ? s.noGroupSelected
                                 : s.noLessonsToday,
-                            style: tt.bodyMedium?.copyWith(
+                            style: const TextStyle(
                               color: Colors.white,
+                              fontSize: 14,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -104,37 +210,42 @@ class WidgetGalleryScreen extends StatelessWidget {
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
+                                  horizontal: 11, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
+                                color: Colors.white.withValues(alpha: 0.18),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
                                 next.$3 != null
                                     ? s.formatCountdown(next.$3!)
                                     : next.$2,
-                                style: tt.labelSmall?.copyWith(
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
                                   color: Colors.white,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
                             Text(
                               '${next.$1.periodStart}–${next.$1.periodEnd}',
-                              style: tt.labelMedium?.copyWith(
+                              style: const TextStyle(
                                 color: Colors.white,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 12),
                         Text(
                           next.$1.subject,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: tt.titleMedium?.copyWith(
+                          style: const TextStyle(
                             color: Colors.white,
+                            fontSize: 17,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
@@ -150,8 +261,9 @@ class WidgetGalleryScreen extends StatelessWidget {
                           ].join(' • '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: tt.bodySmall?.copyWith(
-                            color: Colors.white.withValues(alpha: 0.85),
+                          style: const TextStyle(
+                            color: Color(0xFFD9E2F5),
+                            fontSize: 12,
                           ),
                         ),
                       ],
@@ -163,85 +275,102 @@ class WidgetGalleryScreen extends StatelessWidget {
           ),
           const SizedBox(height: 18),
 
-          // 2. Today's Schedule Timeline (4x3) — Stitch #11
+          // 2. Today's Schedule Timeline (4x3) — matches widget_today_schedule.xml
           _widgetSection(
             context: context,
             title: s.widgetTodayScheduleTitle,
             subtitle: s.widgetTodayScheduleDesc,
             sizeLabel: '4×3',
             widgetKey: 'today_schedule',
-            preview: ExpressiveCard(
-              borderRadius: 22,
-              padding: const EdgeInsets.all(14),
+            preview: _nativeWidgetCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        s.dayFullNames[todayIdx],
-                        style: tt.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
+                      Flexible(
+                        child: Text(
+                          s.dayFullNames[todayIdx],
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: _wText,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
-                      ExpressivePill(
+                      const SizedBox(width: 8),
+                      _nativePill(
                         label: s.classesCount(todayLessons.length),
-                        backgroundColor: cs.primaryFixed,
-                        foregroundColor: cs.onPrimaryFixed,
-                        fontWeight: FontWeight.w700,
+                        backgroundColor: _wPillPrimaryBg,
+                        foregroundColor: _wPillPrimaryFg,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
                   if (todayLessons.isEmpty)
-                    Text(
-                      s.noLessonsToday,
-                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 14, bottom: 6),
+                      child: Text(
+                        s.noLessonsToday,
+                        style: const TextStyle(
+                          color: _wMuted,
+                          fontSize: 13,
+                        ),
+                      ),
                     )
-                  else
-                    for (final lesson in todayLessons.take(3)) ...[
+                  else ...[
+                    const SizedBox(height: 2),
+                    for (final lesson in todayLessons.take(4))
                       Container(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
+                        margin: const EdgeInsets.only(top: 6),
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: cs.surfaceContainerLow,
-                          borderRadius: BorderRadius.circular(12),
+                          color: _wRowBg,
+                          borderRadius: BorderRadius.circular(14),
                         ),
                         child: Row(
                           children: [
-                            Text(
-                              lesson.periodStart,
-                              style: tt.labelMedium?.copyWith(
-                                color: cs.primary,
-                                fontWeight: FontWeight.w800,
+                            SizedBox(
+                              width: 46,
+                              child: Text(
+                                lesson.periodStart,
+                                style: const TextStyle(
+                                  color: _wPrimary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 lesson.subject,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: tt.labelMedium?.copyWith(
+                                style: const TextStyle(
+                                  color: _wText,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
-                            if (lesson.classrooms.isNotEmpty)
+                            if (lesson.classrooms.isNotEmpty) ...[
+                              const SizedBox(width: 6),
                               Text(
                                 TimetableService.cleanClassroomName(
                                     lesson.classrooms.first),
-                                style: tt.labelSmall?.copyWith(
-                                  color: cs.secondary,
-                                  fontWeight: FontWeight.w700,
+                                style: const TextStyle(
+                                  color: _wMuted,
+                                  fontSize: 11,
                                 ),
                               ),
+                            ],
                           ],
                         ),
                       ),
-                    ],
+                  ],
                 ],
               ),
             ),
@@ -251,7 +380,7 @@ class WidgetGalleryScreen extends StatelessWidget {
           ),
           const SizedBox(height: 18),
 
-          // 3. INS Academic Dial (2x2) — Stitch #11
+          // 3. INS Academic Dial (2x2) — matches widget_ins_academic.xml
           _widgetSection(
             context: context,
             title: s.widgetInsAcademicTitle,
@@ -262,55 +391,63 @@ class WidgetGalleryScreen extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: SizedBox(
                 width: 196,
-                child: ExpressiveCard(
-                  borderRadius: 22,
-                  padding: const EdgeInsets.all(14),
+                child: _nativeWidgetCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Icon(Icons.analytics_rounded,
-                              size: 16, color: cs.primary),
-                          const SizedBox(width: 6),
-                          Text(
-                            'INS GPA',
-                            style: tt.labelSmall?.copyWith(
-                              color: cs.primary,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(
-                            gpa.isEmpty ? '—' : gpa,
-                            style: tt.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            '/ 4.5',
-                            style: tt.labelSmall?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
+                      const Text(
+                        'INS GPA',
+                        style: TextStyle(
+                          color: _wPrimary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 6),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Text(
+                              gpa.isEmpty ? '—' : gpa,
+                              style: const TextStyle(
+                                color: _wText,
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(width: 3),
+                            const Text(
+                              '/ 4.5',
+                              style: TextStyle(
+                                color: _wMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
                       Text(
                         acq.isNotEmpty
                             ? '${s.creditsLabel}: $acq${att.isNotEmpty ? '/$att' : ''}'
-                            : s.activeCoursesCount(app.visibleCourses.length),
-                        style: tt.labelSmall?.copyWith(
-                          color: cs.secondary,
-                          fontWeight: FontWeight.w700,
+                            : '${s.creditsLabel}: —',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _wMuted,
+                          fontSize: 11,
                         ),
+                      ),
+                      const SizedBox(height: 8),
+                      _nativePill(
+                        label: s.activeCoursesCount(app.visibleCourses.length),
+                        backgroundColor: _wPillPrimaryBg,
+                        foregroundColor: _wPillPrimaryFg,
+                        fontSize: 10,
                       ),
                     ],
                   ),
@@ -323,16 +460,14 @@ class WidgetGalleryScreen extends StatelessWidget {
           ),
           const SizedBox(height: 18),
 
-          // 4. Deadlines & Assignments (4x2) — Stitch #11
+          // 4. Deadlines & Assignments (4x2) — matches widget_deadlines.xml
           _widgetSection(
             context: context,
             title: s.widgetDeadlinesTitle,
             subtitle: s.widgetDeadlinesDesc,
             sizeLabel: '4×2',
             widgetKey: 'deadlines',
-            preview: ExpressiveCard(
-              borderRadius: 22,
-              padding: const EdgeInsets.all(14),
+            preview: _nativeWidgetCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -341,37 +476,42 @@ class WidgetGalleryScreen extends StatelessWidget {
                     children: [
                       Text(
                         s.navAssignments,
-                        style: tt.titleSmall?.copyWith(
+                        style: const TextStyle(
+                          color: _wText,
+                          fontSize: 14,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      ExpressivePill(
+                      _nativePill(
                         label: s.tasksDueCount(pending.length),
-                        backgroundColor: pending.isEmpty
-                            ? cs.secondaryFixed
-                            : cs.tertiaryFixed,
-                        foregroundColor: pending.isEmpty
-                            ? cs.onSecondaryFixed
-                            : cs.onTertiaryFixed,
-                        fontWeight: FontWeight.w700,
+                        backgroundColor:
+                            pending.isEmpty ? _wPillSecondaryBg : _wPillErrorBg,
+                        foregroundColor:
+                            pending.isEmpty ? _wPillSecondaryFg : _wPillErrorFg,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
                   if (pending.isEmpty)
-                    Text(
-                      s.allCaughtUp,
-                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 14, bottom: 6),
+                      child: Text(
+                        s.allCaughtUp,
+                        style: const TextStyle(
+                          color: _wMuted,
+                          fontSize: 13,
+                        ),
+                      ),
                     )
-                  else
-                    for (final a in pending.take(2))
+                  else ...[
+                    const SizedBox(height: 2),
+                    for (final a in pending.take(3))
                       Container(
-                        margin: const EdgeInsets.only(bottom: 6),
+                        margin: const EdgeInsets.only(top: 6),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
+                            horizontal: 10, vertical: 7),
                         decoration: BoxDecoration(
-                          color: cs.surfaceContainerLow,
-                          borderRadius: BorderRadius.circular(12),
+                          color: _wRowBg,
+                          borderRadius: BorderRadius.circular(14),
                         ),
                         child: Row(
                           children: [
@@ -379,7 +519,14 @@ class WidgetGalleryScreen extends StatelessWidget {
                               width: 8,
                               height: 8,
                               decoration: BoxDecoration(
-                                color: cs.error,
+                                color: (a.dueTimestamp > 0 &&
+                                        a.dueTimestamp - nowSec <= 48 * 3600)
+                                    ? _wDotUrgent
+                                    : (a.dueTimestamp > 0 &&
+                                            a.dueTimestamp - nowSec <=
+                                                7 * 86400)
+                                        ? _wDotSoon
+                                        : _wDotNormal,
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -389,21 +536,27 @@ class WidgetGalleryScreen extends StatelessWidget {
                                 a.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: tt.labelMedium?.copyWith(
+                                style: const TextStyle(
+                                  color: _wText,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 6),
-                            Text(
-                              a.due,
-                              style: tt.labelSmall?.copyWith(
-                                color: cs.onSurfaceVariant,
+                            if (a.due.isNotEmpty) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                a.due,
+                                style: const TextStyle(
+                                  color: _wMuted,
+                                  fontSize: 11,
+                                ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       ),
+                  ],
                 ],
               ),
             ),

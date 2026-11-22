@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cookie_jar/cookie_jar.dart';
@@ -17,6 +18,10 @@ class EclassException implements Exception {
   EclassException(this.message);
   @override
   String toString() => message;
+}
+
+class _InvalidTokenUploadException extends EclassException {
+  _InvalidTokenUploadException(super.message);
 }
 
 /// Direct eClass client for https://eclass.inha.ac.kr (Moodle 3.2.2).
@@ -1188,120 +1193,604 @@ class EclassService {
     return out;
   }
 
+  /// Parses Moodle's `webservice/upload.php` response (often served as `text/plain`).
+  static int parseUploadResponse(dynamic raw) {
+    dynamic decoded = raw;
+    if (raw is String) {
+      var text = raw.trim();
+      if (text.isEmpty) {
+        throw EclassException('Empty upload response from eClass');
+      }
+      if (!text.startsWith('[') && !text.startsWith('{')) {
+        final arrIdx = text.indexOf('[');
+        final objIdx = text.indexOf('{');
+        final starts = [arrIdx, objIdx].where((i) => i >= 0).toList();
+        if (starts.isNotEmpty) {
+          starts.sort();
+          text = text.substring(starts.first);
+        }
+      }
+      try {
+        decoded = jsonDecode(text);
+      } on FormatException {
+        throw EclassException('Unexpected upload response from eClass');
+      }
+    }
+
+    if (decoded is Map) {
+      final errorCode = decoded['errorcode']?.toString();
+      final errText = decoded['error'] ?? decoded['message'];
+      if (errorCode == 'invalidtoken') {
+        throw _InvalidTokenUploadException(
+            (errText ?? 'Invalid token').toString());
+      }
+      if (errText != null || decoded['exception'] != null) {
+        throw EclassException((errText ?? 'Upload rejected').toString());
+      }
+      throw EclassException('Unexpected upload response from eClass');
+    }
+
+    if (decoded is List) {
+      if (decoded.isEmpty) {
+        throw EclassException('Empty upload response from eClass');
+      }
+      final first = decoded.first;
+      if (first is Map) {
+        final itemErr = first['error'] ?? first['errortype'];
+        if (itemErr != null && itemErr.toString().trim().isNotEmpty) {
+          if (first['errorcode']?.toString() == 'invalidtoken') {
+            throw _InvalidTokenUploadException(itemErr.toString());
+          }
+          throw EclassException(itemErr.toString());
+        }
+        final rawId = first['itemid'];
+        final parsed = rawId == null ? null : int.tryParse(rawId.toString());
+        if (parsed != null) {
+          return parsed;
+        }
+      }
+      throw EclassException('Unexpected upload response from eClass');
+    }
+
+    throw EclassException('Unexpected upload response from eClass');
+  }
+
+  Future<({String? cmid, int? maxFiles, bool onlineTextEnabled})>
+      _getAssignmentMeta(int assignmentId) async {
+    try {
+      final res = await callWebService('mod_assign_get_assignments', {});
+      if (res is Map) {
+        for (final c in (res['courses'] as List?) ?? []) {
+          for (final a in (c['assignments'] as List?) ?? []) {
+            if (int.tryParse(a['id']?.toString() ?? '') != assignmentId) {
+              continue;
+            }
+            final cmid = a['cmid']?.toString();
+            int? maxFiles;
+            var onlineTextEnabled = false;
+            for (final cfg in (a['configs'] as List?) ?? []) {
+              if (cfg is! Map) continue;
+              final plugin = cfg['plugin']?.toString();
+              final name = cfg['name']?.toString();
+              final val = cfg['value']?.toString();
+              if (plugin == 'file' && name == 'maxfilesubmissions') {
+                maxFiles = int.tryParse(val ?? '');
+              } else if (plugin == 'onlinetext' &&
+                  name == 'enabled' &&
+                  val == '1') {
+                onlineTextEnabled = true;
+              }
+            }
+            return (
+              cmid: cmid,
+              maxFiles: maxFiles,
+              onlineTextEnabled: onlineTextEnabled,
+            );
+          }
+        }
+      }
+    } catch (_) {}
+    return (cmid: null, maxFiles: null, onlineTextEnabled: false);
+  }
+
+  static String? _extractCmidFromUrl(String? url) {
+    if (url == null || url.isEmpty) return null;
+    final parsed = Uri.tryParse(url);
+    final id = parsed?.queryParameters['id']?.trim();
+    if (id != null && id.isNotEmpty) return id;
+    return null;
+  }
+
   Future<void> uploadSubmission(
     int assignmentId,
     String filePath,
     String filename, {
     bool submitForGrading = false,
+    String? assignmentUrl,
   }) async {
-    final token = await fetchApiToken();
-    if (token == null || token.isEmpty) {
-      throw EclassException('eClass API token unavailable');
-    }
-
-    // Check existing submission files so we preserve them when adding a new file
+    // Check existing submission files & online text before uploading
     final existing = <Map<String, String>>[];
+    var hasOnlineTextPlugin = false;
+    var existingOnlineText = '';
+    var existingOnlineTextFormat = 1;
+    var hardLocked = false;
+
     try {
       final st = await callWebService(
           'mod_assign_get_submission_status', {'assignid': assignmentId});
       if (st is Map) {
         final last = st['lastattempt'];
         if (last is Map && last['canedit'] == false) {
+          hardLocked = true;
           throw EclassException('This submission can no longer be edited.');
         }
         final sub = last is Map ? last['submission'] : null;
         if (sub is Map) {
           for (final pl in (sub['plugins'] as List?) ?? []) {
-            if (pl['type'] != 'file') continue;
-            for (final fa in (pl['fileareas'] as List?) ?? []) {
-              for (final f in (fa['files'] as List?) ?? []) {
-                final fn = f['filename']?.toString() ?? '';
-                final furl = f['fileurl']?.toString() ?? '';
-                if (fn.isNotEmpty && furl.isNotEmpty && fn != filename) {
-                  existing.add({'filename': fn, 'url': furl});
+            if (pl is! Map) continue;
+            final type = pl['type']?.toString();
+            if (type == 'file') {
+              for (final fa in (pl['fileareas'] as List?) ?? []) {
+                if (fa is! Map) continue;
+                for (final f in (fa['files'] as List?) ?? []) {
+                  if (f is! Map) continue;
+                  final fn = f['filename']?.toString() ?? '';
+                  final furl = f['fileurl']?.toString() ?? '';
+                  if (fn.isNotEmpty && furl.isNotEmpty && fn != filename) {
+                    existing.add({'filename': fn, 'url': furl});
+                  }
                 }
+              }
+            } else if (type == 'onlinetext') {
+              hasOnlineTextPlugin = true;
+              final fields = (pl['editorfields'] as List?) ?? [];
+              if (fields.isNotEmpty && fields.first is Map) {
+                final firstField = fields.first as Map;
+                existingOnlineText = firstField['text']?.toString() ?? '';
+                existingOnlineTextFormat =
+                    int.tryParse(firstField['format']?.toString() ?? '') ?? 1;
               }
             }
           }
         }
       }
     } catch (e) {
-      if (e is EclassException) rethrow;
+      if (hardLocked) rethrow;
     }
 
-    final itemId = await _uploadDraft(token, filePath, filename, 0);
+    final meta = await _getAssignmentMeta(assignmentId);
+    if (meta.onlineTextEnabled) {
+      hasOnlineTextPlugin = true;
+    }
+    final effectiveCmid = _extractCmidFromUrl(assignmentUrl) ?? meta.cmid;
 
-    // Re-attach previously uploaded files into the same draft area
-    if (existing.isNotEmpty) {
-      final tmpDir = await getTemporaryDirectory();
-      for (final old in existing) {
-        final tmpPath = p.join(tmpDir.path, 'prev_${old['filename']}');
-        try {
-          final url = old['url']!;
-          final dlUrl = url.contains('token=')
-              ? url
-              : '$url${url.contains('?') ? '&' : '?'}token=$token';
-          await _dio.download(dlUrl, tmpPath);
-          await _uploadDraft(token, tmpPath, old['filename']!, itemId);
-        } catch (_) {
-        } finally {
-          final f = File(tmpPath);
-          if (await f.exists()) await f.delete();
+    try {
+      final itemId = await _uploadDraft(filePath, filename, 0);
+
+      // Re-attach previous files only when assignment allows multiple files
+      final maxFiles = meta.maxFiles;
+      if (existing.isNotEmpty && maxFiles != null && maxFiles > 1) {
+        final token = await fetchApiToken();
+        if (token != null && token.isNotEmpty) {
+          final tmpDir = await getTemporaryDirectory();
+          for (final old in existing.take(maxFiles - 1)) {
+            final safeName = p.basename(old['filename']!);
+            final tmpPath = p.join(tmpDir.path, 'prev_$safeName');
+            try {
+              final url = old['url']!;
+              final dlUrl = url.contains('token=')
+                  ? url
+                  : '$url${url.contains('?') ? '&' : '?'}token=$token';
+              await _dio.download(dlUrl, tmpPath);
+              await _uploadDraft(tmpPath, old['filename']!, itemId);
+            } catch (_) {
+            } finally {
+              final f = File(tmpPath);
+              if (await f.exists()) await f.delete();
+            }
+          }
         }
       }
-    }
 
-    final warnings = await callWebService('mod_assign_save_submission', {
-      'assignmentid': assignmentId,
-      'plugindata[files_filemanager]': itemId,
-    });
-    if (warnings is List && warnings.isNotEmpty) {
-      final first = warnings.first;
-      final msg =
-          first is Map ? first['message']?.toString() : first.toString();
-      throw EclassException(msg ?? 'Submission rejected');
-    }
-
-    if (submitForGrading) {
-      final submitWarnings = await callWebService(
-        'mod_assign_submit_for_grading',
-        {'assignmentid': assignmentId, 'acceptsubmissionstatement': 1},
-      );
-      if (submitWarnings is List && submitWarnings.isNotEmpty) {
-        final first = submitWarnings.first;
-        final msg =
-            first is Map ? first['message']?.toString() : first.toString();
-        throw EclassException(msg ?? 'Submit for grading rejected');
+      final saveParams = <String, dynamic>{
+        'assignmentid': assignmentId,
+        'plugindata[files_filemanager]': itemId,
+      };
+      if (hasOnlineTextPlugin) {
+        saveParams['plugindata[onlinetext_editor][text]'] = existingOnlineText;
+        saveParams['plugindata[onlinetext_editor][format]'] =
+            existingOnlineTextFormat;
+        saveParams['plugindata[onlinetext_editor][itemid]'] = 0;
       }
+
+      dynamic warnings;
+      try {
+        warnings =
+            await callWebService('mod_assign_save_submission', saveParams);
+      } on EclassException catch (e) {
+        if (!hasOnlineTextPlugin &&
+            e.message.toLowerCase().contains('onlinetext')) {
+          saveParams['plugindata[onlinetext_editor][text]'] =
+              existingOnlineText;
+          saveParams['plugindata[onlinetext_editor][format]'] =
+              existingOnlineTextFormat;
+          saveParams['plugindata[onlinetext_editor][itemid]'] = 0;
+          warnings =
+              await callWebService('mod_assign_save_submission', saveParams);
+        } else {
+          rethrow;
+        }
+      }
+
+      if (warnings is List && warnings.isNotEmpty) {
+        final first = warnings.first;
+        final msg = first is Map
+            ? (first['message'] ?? first['warningcode'])?.toString()
+            : first.toString();
+        throw EclassException(msg ?? 'Submission rejected');
+      }
+
+      if (submitForGrading) {
+        var shouldSubmit = true;
+        try {
+          final afterSt = await callWebService(
+            'mod_assign_get_submission_status',
+            {'assignid': assignmentId},
+          );
+          if (afterSt is Map) {
+            final last = afterSt['lastattempt'];
+            if (last is Map) {
+              final sub = last['submission'];
+              final subStatus = sub is Map ? sub['status']?.toString() : null;
+              final canSubmit = last['cansubmit'] == true;
+              if (subStatus == 'submitted' || !canSubmit) {
+                shouldSubmit = false;
+              }
+            }
+          }
+        } catch (_) {}
+
+        if (shouldSubmit) {
+          final submitWarnings = await callWebService(
+            'mod_assign_submit_for_grading',
+            {'assignmentid': assignmentId, 'acceptsubmissionstatement': 1},
+          );
+          if (submitWarnings is List && submitWarnings.isNotEmpty) {
+            final first = submitWarnings.first;
+            final msg = first is Map
+                ? (first['message'] ?? first['warningcode'])?.toString()
+                : first.toString();
+            throw EclassException(msg ?? 'Submit for grading rejected');
+          }
+        }
+      }
+    } catch (e) {
+      if (effectiveCmid != null &&
+          effectiveCmid.isNotEmpty &&
+          await ensureWebLoggedIn()) {
+        await _uploadSubmissionViaWeb(
+          effectiveCmid,
+          filePath,
+          filename,
+          submitForGrading: submitForGrading,
+        );
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  /// Finalizes an already-saved draft assignment submission for grading.
+  Future<void> submitExistingDraft(int assignmentId) async {
+    final st = await callWebService(
+      'mod_assign_get_submission_status',
+      {'assignid': assignmentId},
+    );
+    if (st is! Map) {
+      throw EclassException('Could not check submission status');
+    }
+    final last = st['lastattempt'];
+    if (last is! Map) {
+      throw EclassException('Could not check submission status');
+    }
+    final sub = last['submission'];
+    final subStatus = sub is Map ? sub['status']?.toString() : null;
+    if (subStatus == 'submitted') return;
+    if (last['cansubmit'] != true) {
+      throw EclassException('This submission cannot be finalized right now.');
+    }
+    final submitWarnings = await callWebService(
+      'mod_assign_submit_for_grading',
+      {'assignmentid': assignmentId, 'acceptsubmissionstatement': 1},
+    );
+    if (submitWarnings is List && submitWarnings.isNotEmpty) {
+      final first = submitWarnings.first;
+      final msg = first is Map
+          ? (first['message'] ?? first['warningcode'])?.toString()
+          : first.toString();
+      throw EclassException(msg ?? 'Submit for grading rejected');
     }
   }
 
   Future<int> _uploadDraft(
-    String token,
     String filePath,
     String filename,
     int itemId,
   ) async {
-    final formData = FormData.fromMap({
-      'token': token,
-      'filearea': 'draft',
+    for (int attempt = 0; attempt < 2; attempt++) {
+      final token = await fetchApiToken(refresh: attempt == 1);
+      if (token == null || token.isEmpty) {
+        throw EclassException('eClass API token unavailable');
+      }
+      final formData = FormData.fromMap({
+        'token': token,
+        'filearea': 'draft',
+        'filepath': '/',
+        'itemid': itemId,
+        'file_1': await MultipartFile.fromFile(filePath, filename: filename),
+      });
+
+      final uploadResp = await _dio.post<dynamic>(
+        '$baseUrl/webservice/upload.php',
+        data: formData,
+        options: Options(responseType: ResponseType.plain),
+      );
+      try {
+        return parseUploadResponse(uploadResp.data);
+      } on _InvalidTokenUploadException {
+        if (attempt == 0) {
+          _apiToken = null;
+          continue;
+        }
+        rethrow;
+      }
+    }
+    throw EclassException('eClass API auth failed');
+  }
+
+  static String? _extractBalancedJsonObject(String source, int startIdx) {
+    if (startIdx < 0 || startIdx >= source.length || source[startIdx] != '{') {
+      return null;
+    }
+    var depth = 0;
+    var inString = false;
+    var escaped = false;
+    for (int i = startIdx; i < source.length; i++) {
+      final ch = source[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (inString) {
+        if (ch == r'\') {
+          escaped = true;
+        } else if (ch == '"') {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch == '"') {
+        inString = true;
+      } else if (ch == '{') {
+        depth++;
+      } else if (ch == '}') {
+        depth--;
+        if (depth == 0) {
+          return source.substring(startIdx, i + 1);
+        }
+      }
+    }
+    return null;
+  }
+
+  Future<void> _uploadSubmissionViaWeb(
+    String cmid,
+    String filePath,
+    String filename, {
+    bool submitForGrading = false,
+  }) async {
+    final editUrl = '$baseUrl/mod/assign/view.php?id=$cmid&action=editsubmission';
+    final editResp = await _getAuthedHtml(editUrl);
+    final html = editResp.data ?? '';
+    if (_isLoginPage(editResp.finalUri, html)) {
+      throw EclassException('eClass web session expired');
+    }
+
+    final initMarker = html.indexOf('M.form_filemanager.init(');
+    if (initMarker < 0) {
+      throw EclassException('File upload form unavailable for this assignment');
+    }
+    final braceIdx = html.indexOf('{', initMarker);
+    final jsonStr = _extractBalancedJsonObject(html, braceIdx);
+    if (jsonStr == null) {
+      throw EclassException('Could not parse assignment file manager config');
+    }
+
+    final fmCfg = jsonDecode(jsonStr) as Map<String, dynamic>;
+    final itemId = fmCfg['itemid']?.toString() ?? '';
+    final clientId = fmCfg['client_id']?.toString() ?? '';
+    final ctxId = (fmCfg['context'] is Map)
+        ? (fmCfg['context'] as Map)['id']?.toString() ?? ''
+        : '';
+    final author = fmCfg['author']?.toString() ?? 'Student';
+    final maxFiles = int.tryParse(fmCfg['maxfiles']?.toString() ?? '');
+    final existingList = (fmCfg['list'] as List?) ?? const [];
+
+    String? uploadRepoId;
+    final fp = fmCfg['filepicker'];
+    if (fp is Map && fp['repositories'] is Map) {
+      for (final entry in (fp['repositories'] as Map).entries) {
+        final v = entry.value;
+        if (v is Map && v['type'] == 'upload') {
+          uploadRepoId = (v['id'] ?? entry.key).toString();
+          break;
+        }
+      }
+    }
+
+    final doc = html_parser.parse(html);
+    final form = doc.querySelector('form[action*="view.php"]') ??
+        doc.querySelector('form.mform');
+    if (form == null) {
+      throw EclassException('Submission form missing on eClass page');
+    }
+
+    final payload = <String, String>{};
+    for (final inp in form.querySelectorAll('input[name]')) {
+      final name = inp.attributes['name'] ?? '';
+      if (name.isEmpty) continue;
+      final type = (inp.attributes['type'] ?? 'text').toLowerCase();
+      if (type == 'hidden') {
+        payload[name] = inp.attributes['value'] ?? '';
+      }
+    }
+    final textarea = form.querySelector('textarea[name="onlinetext_editor[text]"]');
+    if (textarea != null) {
+      payload['onlinetext_editor[text]'] = textarea.text;
+    }
+
+    final sessMatch = RegExp(r'"sesskey":"([^"]+)"').firstMatch(html);
+    final sesskey = sessMatch?.group(1) ?? payload['sesskey'] ?? '';
+    if (itemId.isEmpty ||
+        clientId.isEmpty ||
+        ctxId.isEmpty ||
+        uploadRepoId == null ||
+        sesskey.isEmpty) {
+      throw EclassException('Missing required Moodle upload parameters');
+    }
+
+    // If single-file limit already reached in draft area, clear old draft file first.
+    if (maxFiles == 1 && existingList.isNotEmpty) {
+      for (final old in existingList) {
+        if (old is! Map) continue;
+        final oldName = old['filename']?.toString() ?? '';
+        final oldPath = old['filepath']?.toString() ?? '/';
+        if (oldName.isEmpty) continue;
+        try {
+          await _dio.post<dynamic>(
+            '$baseUrl/repository/draftfiles_ajax.php?action=delete',
+            data: {
+              'sesskey': sesskey,
+              'client_id': clientId,
+              'draftitemid': itemId,
+              'filepath': oldPath,
+              'filename': oldName,
+            },
+            options: Options(
+              contentType: Headers.formUrlEncodedContentType,
+              responseType: ResponseType.plain,
+            ),
+          );
+        } catch (_) {}
+      }
+    }
+
+    final uploadForm = FormData.fromMap({
+      'repo_id': uploadRepoId,
       'itemid': itemId,
-      'file_1': await MultipartFile.fromFile(filePath, filename: filename),
+      'ctx_id': ctxId,
+      'client_id': clientId,
+      'sesskey': sesskey,
+      'savepath': '/',
+      'title': filename,
+      'author': author,
+      'license': 'allrightsreserved',
+      'repo_upload_file':
+          await MultipartFile.fromFile(filePath, filename: filename),
     });
 
-    final uploadResp = await _dio.post<dynamic>(
-      '$baseUrl/webservice/upload.php',
-      data: formData,
+    final repoResp = await _dio.post<dynamic>(
+      '$baseUrl/repository/repository_ajax.php?action=upload',
+      data: uploadForm,
+      options: Options(responseType: ResponseType.plain),
     );
-    final res = uploadResp.data;
-    if (res is Map && (res['error'] != null || res['exception'] != null)) {
-      throw EclassException(
-          (res['error'] ?? res['message'] ?? 'Upload rejected').toString());
+    final repoRaw = (repoResp.data?.toString() ?? '').trim();
+    if (repoRaw.isNotEmpty) {
+      try {
+        final repoDecoded = jsonDecode(repoRaw);
+        if (repoDecoded is Map && repoDecoded['error'] != null) {
+          throw EclassException(repoDecoded['error'].toString());
+        }
+      } on FormatException {
+        throw EclassException('Unexpected web upload response from eClass');
+      }
     }
-    if (res is! List || res.isEmpty || res.first['itemid'] == null) {
-      throw EclassException('Unexpected upload response from eClass');
+
+    payload['files_filemanager'] = itemId;
+    payload['submitbutton'] =
+        form.querySelector('input[name="submitbutton"]')?.attributes['value'] ??
+            'Save changes';
+
+    final actionRaw = form.attributes['action'] ?? '';
+    final actionUri = actionRaw.isNotEmpty
+        ? editResp.finalUri.resolve(actionRaw)
+        : Uri.parse('$baseUrl/mod/assign/view.php');
+
+    final saveResp = await requestWithRedirects<String>(
+      _dio,
+      actionUri.toString(),
+      method: 'POST',
+      data: payload,
+      options: Options(
+        contentType: Headers.formUrlEncodedContentType,
+        responseType: ResponseType.plain,
+      ),
+    );
+    final saveHtml = saveResp.data ?? '';
+    if (saveResp.finalUri.queryParameters['action'] == 'editsubmission') {
+      final errEl = html_parser.parse(saveHtml).querySelector('.mform .error');
+      if (errEl != null && errEl.text.trim().isNotEmpty) {
+        throw EclassException(errEl.text.trim());
+      }
     }
-    return int.parse(res.first['itemid'].toString());
+
+    if (submitForGrading) {
+      final viewResp =
+          await _getAuthedHtml('$baseUrl/mod/assign/view.php?id=$cmid');
+      final viewDoc = html_parser.parse(viewResp.data ?? '');
+      final hasSubmitBtn = viewDoc.querySelector(
+            'form input[name="action"][value="submit"]',
+          ) !=
+          null;
+      if (hasSubmitBtn) {
+        final confirmResp = await _getAuthedHtml(
+            '$baseUrl/mod/assign/view.php?id=$cmid&action=submit');
+        final confirmDoc = html_parser.parse(confirmResp.data ?? '');
+        final cForm = confirmDoc.querySelector('form[action*="view.php"]') ??
+            confirmDoc.querySelector('form.mform');
+        if (cForm != null) {
+          final cPayload = <String, String>{};
+          for (final inp in cForm.querySelectorAll('input[name]')) {
+            final name = inp.attributes['name'] ?? '';
+            if (name.isEmpty) continue;
+            final type = (inp.attributes['type'] ?? 'text').toLowerCase();
+            if (type == 'hidden') {
+              cPayload[name] = inp.attributes['value'] ?? '';
+            } else if (type == 'checkbox' && name.contains('statement')) {
+              cPayload[name] = inp.attributes['value'] ?? '1';
+            }
+          }
+          cPayload['submitbutton'] = cForm
+                  .querySelector('input[name="submitbutton"]')
+                  ?.attributes['value'] ??
+              'Continue';
+          final cAction = cForm.attributes['action'] ?? '';
+          final cUri = cAction.isNotEmpty
+              ? confirmResp.finalUri.resolve(cAction)
+              : Uri.parse('$baseUrl/mod/assign/view.php');
+          await requestWithRedirects<String>(
+            _dio,
+            cUri.toString(),
+            method: 'POST',
+            data: cPayload,
+            options: Options(
+              contentType: Headers.formUrlEncodedContentType,
+              responseType: ResponseType.plain,
+            ),
+          );
+        }
+      }
+    }
   }
 
   static String syllabusUrl(String courseId) =>

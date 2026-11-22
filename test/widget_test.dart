@@ -1121,4 +1121,100 @@ void main() {
     expect(find.text('Check for updates'), findsOneWidget);
     expect(find.text('Current version v1.1.1 • GitHub Releases'), findsOneWidget);
   });
+
+  test('Assignment isDraft and isSubmitted classify drafts vs submitted', () {
+    const draftEn = Assignment(
+      id: '1::D1',
+      courseId: '1',
+      courseName: 'CS',
+      name: 'Draft EN',
+      due: '2026-11-25',
+      status: 'Draft (not submitted)',
+    );
+    const draftRu = Assignment(
+      id: '1::D2',
+      courseId: '1',
+      courseName: 'CS',
+      name: 'Draft RU',
+      due: '2026-11-25',
+      status: 'Черновик (не отправлен)',
+    );
+    const submitted = Assignment(
+      id: '1::S1',
+      courseId: '1',
+      courseName: 'CS',
+      name: 'Submitted',
+      due: '2026-11-25',
+      status: 'Submitted for grading',
+    );
+    const pending = Assignment(
+      id: '1::P1',
+      courseId: '1',
+      courseName: 'CS',
+      name: 'Pending',
+      due: '2026-11-25',
+      status: 'No submission',
+    );
+    const graded = Assignment(
+      id: '1::G1',
+      courseId: '1',
+      courseName: 'CS',
+      name: 'Graded',
+      due: '2026-11-25',
+      status: 'Graded',
+      grade: '95',
+      gradeMax: '100',
+    );
+
+    expect(draftEn.isDraft, isTrue);
+    expect(draftEn.isSubmitted, isFalse);
+    expect(draftRu.isDraft, isTrue);
+    expect(draftRu.isSubmitted, isFalse);
+    expect(submitted.isDraft, isFalse);
+    expect(submitted.isSubmitted, isTrue);
+    expect(pending.isDraft, isFalse);
+    expect(pending.isSubmitted, isFalse);
+    expect(graded.isSubmitted, isTrue);
+  });
+
+  test('EclassService.parseUploadResponse decodes text/plain JSON & errors', () {
+    expect(
+      EclassService.parseUploadResponse(
+        '[{"itemid":123456,"filename":"hw.pdf"}]',
+      ),
+      123456,
+    );
+    expect(
+      EclassService.parseUploadResponse([
+        {'itemid': 987654},
+      ]),
+      987654,
+    );
+    expect(
+      () => EclassService.parseUploadResponse('[{"error":"File too large"}]'),
+      throwsA(
+        isA<EclassException>().having(
+          (e) => e.message,
+          'message',
+          contains('File too large'),
+        ),
+      ),
+    );
+    expect(
+      () => EclassService.parseUploadResponse(
+        '{"error":"Invalid token","errorcode":"invalidtoken"}',
+      ),
+      throwsA(
+        isA<EclassException>().having(
+          (e) => e.message,
+          'message',
+          contains('Invalid token'),
+        ),
+      ),
+    );
+    expect(
+      () => EclassService.parseUploadResponse('[]'),
+      throwsA(isA<EclassException>()),
+    );
+  });
 }

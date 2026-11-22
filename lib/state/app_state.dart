@@ -261,7 +261,8 @@ class AppState extends ChangeNotifier {
       final oldIds = oldAssigns.map((a) => a.id).toSet();
       final oldGrades = await _db.getGrades(course.id);
       final oldGradeMap = {
-        for (final g in oldGrades) '${g.itemType}::${g.category}::${g.name}': g.value
+        for (final g in oldGrades)
+          '${g.itemType}::${g.category}::${g.name}': g.value
       };
 
       final results = await Future.wait([
@@ -389,6 +390,27 @@ class AppState extends ChangeNotifier {
       await _rescheduleDeadlineReminders();
       await _updateLastSync();
       await UpdateService.refreshHomeWidgets();
+    } finally {
+      isSyncing = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> syncCourseAssignments(String courseId, String courseName) async {
+    if (!isLoggedIn) return;
+    isSyncing = true;
+    notifyListeners();
+    try {
+      final assigns = await eclass.getAssignments(courseId, courseName);
+      if (assigns.isNotEmpty) {
+        await _db.saveCourseAssignments(courseId, assigns);
+      }
+      allAssignments = await _db.getAssignments();
+      await _rescheduleDeadlineReminders();
+      await _updateLastSync();
+      await UpdateService.refreshHomeWidgets();
+    } catch (e) {
+      lastError = e.toString();
     } finally {
       isSyncing = false;
       notifyListeners();
@@ -543,7 +565,8 @@ class AppState extends ChangeNotifier {
     await _db.saveSetting('dynamic_color', updated.dynamicColor.toString());
     await _db.saveSetting('language', updated.language);
     await _db.saveSetting('hide_submitted', updated.hideSubmitted.toString());
-    await _db.saveSetting('show_all_courses', updated.showAllCourses.toString());
+    await _db.saveSetting(
+        'show_all_courses', updated.showAllCourses.toString());
     await _db.saveSetting(
         'notify_assignments', updated.notifyAssignments.toString());
     await _db.saveSetting('notify_grades', updated.notifyGrades.toString());

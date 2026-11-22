@@ -29,10 +29,8 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
     AppHaptics.selection();
     setState(() => _downloadingLinks.add(f.link));
     try {
-      final path = await context
-          .read<AppState>()
-          .eclass
-          .downloadFile(f.link, f.name);
+      final path =
+          await context.read<AppState>().eclass.downloadFile(f.link, f.name);
       await OpenFilex.open(path);
     } catch (e) {
       if (mounted) {
@@ -57,7 +55,13 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
     final app = context.read<AppState>();
     final s = app.s;
 
-    if (_pickedFile == null || _pickedFile!.path == null) {
+    final submitSavedDraft = _pickedFile == null &&
+        a.isDraft &&
+        _honorCodeChecked &&
+        a.submittedFiles.isNotEmpty;
+
+    if (!submitSavedDraft &&
+        (_pickedFile == null || _pickedFile!.path == null)) {
       await _pickFile();
       if (_pickedFile == null || _pickedFile!.path == null || !mounted) return;
     }
@@ -65,23 +69,38 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
     AppHaptics.medium();
     setState(() => _submitting = true);
     try {
-      await app.eclass.uploadSubmission(
-        assignId,
-        _pickedFile!.path!,
-        _pickedFile!.name,
-        submitForGrading: _honorCodeChecked,
-      );
+      if (submitSavedDraft) {
+        await app.eclass.submitExistingDraft(assignId);
+      } else {
+        await app.eclass.uploadSubmission(
+          assignId,
+          _pickedFile!.path!,
+          _pickedFile!.name,
+          submitForGrading: _honorCodeChecked,
+          assignmentUrl: a.url,
+        );
+      }
       if (!mounted) return;
       AppHaptics.heavy();
       setState(() => _pickedFile = null);
       showQuickToast(context, s.uploadSuccess);
-      await app.syncAllAssignments();
+      await _refresh(a);
     } catch (e) {
       if (mounted) {
         showQuickToast(context, e.toString());
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _refresh(Assignment a) async {
+    AppHaptics.light();
+    final app = context.read<AppState>();
+    if (a.courseId.isNotEmpty) {
+      await app.syncCourseAssignments(a.courseId, a.courseName);
+    } else {
+      await app.syncAllAssignments();
     }
   }
 
@@ -155,9 +174,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
               if (context.mounted) {
                 showQuickToast(
                   context,
-                  !isHidden
-                      ? s.deadlineHiddenToast
-                      : s.deadlineRestoredToast,
+                  !isHidden ? s.deadlineHiddenToast : s.deadlineRestoredToast,
                 );
               }
             },
@@ -165,187 +182,127 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
         ],
       ),
       bottomNavigationBar: _buildStickyDock(context, a, cs, tt, s),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
-        children: [
-          // Course Breadcrumb Chip + Hidden Pill
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              if (a.courseName.isNotEmpty)
-                ExpressivePill(
-                  icon: Icons.school_outlined,
-                  label: a.courseName,
-                  backgroundColor: cs.primaryFixed,
-                  foregroundColor: cs.onPrimaryFixed,
-                  fontWeight: FontWeight.w700,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                  onTap: matchedCourse == null
-                      ? null
-                      : () {
-                          AppHaptics.light();
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  CourseDetailScreen(course: matchedCourse),
-                            ),
-                          );
-                        },
-                ),
-              if (isHidden)
-                ExpressivePill(
-                  icon: Icons.visibility_off_outlined,
-                  label: s.hiddenBadge,
-                  backgroundColor: cs.tertiaryFixed,
-                  foregroundColor: cs.onTertiaryFixed,
-                  fontWeight: FontWeight.w700,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            a.name,
-            style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 14),
-
-          // Deadline & Points Bento Card (Stitch #12)
-          ExpressiveCard(
-            borderRadius: 24,
-            padding: const EdgeInsets.all(16),
-            child: Row(
+      body: RefreshIndicator(
+        onRefresh: () => _refresh(a),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
+          children: [
+            // Course Breadcrumb Chip + Hidden Pill
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
               children: [
-                SquircleIcon(
-                  size: 46,
-                  radius: 15,
-                  iconSize: 23,
-                  icon: a.isSubmitted
-                      ? Icons.task_alt_rounded
-                      : Icons.alarm_rounded,
-                  backgroundColor: dueBg,
-                  iconColor: dueFg,
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        a.due.isNotEmpty ? a.due : s.deadlineSectionLabel,
-                        style: tt.labelSmall?.copyWith(
-                          color: isOverdue || isUrgent
-                              ? cs.error
-                              : cs.onSurfaceVariant,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        a.isGradedOnly
-                            ? s.gradedLabel
-                            : (a.isSubmitted
-                                ? s.submitted
-                                : _countdownText(a, s)),
-                        style: tt.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (a.gradeDisplay != null)
+                if (a.courseName.isNotEmpty)
                   ExpressivePill(
-                    icon: Icons.grade_rounded,
-                    label: a.gradeDisplay!,
-                    backgroundColor: cs.secondaryFixed,
-                    foregroundColor: cs.onSecondaryFixed,
-                    fontWeight: FontWeight.w800,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 7),
-                  )
-                else if (a.effectiveMaxPoints != null)
-                  ExpressivePill(
-                    icon: Icons.star_outline_rounded,
-                    label: s.maxPointsLabel(a.effectiveMaxPoints!),
-                    backgroundColor: cs.primary,
-                    foregroundColor: cs.onPrimary,
+                    icon: Icons.school_outlined,
+                    label: a.courseName,
+                    backgroundColor: cs.primaryFixed,
+                    foregroundColor: cs.onPrimaryFixed,
                     fontWeight: FontWeight.w700,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 7),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    onTap: matchedCourse == null
+                        ? null
+                        : () {
+                            AppHaptics.light();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    CourseDetailScreen(course: matchedCourse),
+                              ),
+                            );
+                          },
+                  ),
+                if (isHidden)
+                  ExpressivePill(
+                    icon: Icons.visibility_off_outlined,
+                    label: s.hiddenBadge,
+                    backgroundColor: cs.tertiaryFixed,
+                    foregroundColor: cs.onTertiaryFixed,
+                    fontWeight: FontWeight.w700,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   ),
               ],
             ),
-          ),
-          const SizedBox(height: 14),
-
-          // Problem Statement & Starter Files Card
-          ExpressiveCard(
-            borderRadius: 24,
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    SquircleIcon(
-                      size: 38,
-                      radius: 12,
-                      iconSize: 20,
-                      icon: Icons.description_outlined,
-                      backgroundColor: cs.secondaryFixed,
-                      iconColor: cs.onSecondaryFixed,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        s.problemStatement,
-                        style: tt.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (a.intro.isNotEmpty)
-                  SelectableText(
-                    a.intro,
-                    style: tt.bodyMedium?.copyWith(
-                      color: cs.onSurface,
-                      height: 1.5,
-                    ),
-                  )
-                else
-                  Text(
-                    s.noDescriptionProvided,
-                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                  ),
-                if (a.files.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    s.attachedFiles.toUpperCase(),
-                    style: tt.labelSmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.7,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  for (final f in a.files) _buildFileTile(f, cs, tt),
-                ],
-              ],
+            const SizedBox(height: 10),
+            Text(
+              a.name,
+              style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
             ),
-          ),
-
-          // Instructor Feedback Card
-          if (a.feedbackComment.isNotEmpty ||
-              a.gradeDisplay != null ||
-              a.isSubmitted) ...[
             const SizedBox(height: 14),
+
+            // Deadline & Points Bento Card (Stitch #12)
+            ExpressiveCard(
+              borderRadius: 24,
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  SquircleIcon(
+                    size: 46,
+                    radius: 15,
+                    iconSize: 23,
+                    icon: a.isSubmitted
+                        ? Icons.task_alt_rounded
+                        : Icons.alarm_rounded,
+                    backgroundColor: dueBg,
+                    iconColor: dueFg,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          a.due.isNotEmpty ? a.due : s.deadlineSectionLabel,
+                          style: tt.labelSmall?.copyWith(
+                            color: isOverdue || isUrgent
+                                ? cs.error
+                                : cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          a.isGradedOnly
+                              ? s.gradedLabel
+                              : (a.isSubmitted
+                                  ? s.submitted
+                                  : _countdownText(a, s)),
+                          style: tt.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (a.gradeDisplay != null)
+                    ExpressivePill(
+                      icon: Icons.grade_rounded,
+                      label: a.gradeDisplay!,
+                      backgroundColor: cs.secondaryFixed,
+                      foregroundColor: cs.onSecondaryFixed,
+                      fontWeight: FontWeight.w800,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 7),
+                    )
+                  else if (a.effectiveMaxPoints != null)
+                    ExpressivePill(
+                      icon: Icons.star_outline_rounded,
+                      label: s.maxPointsLabel(a.effectiveMaxPoints!),
+                      backgroundColor: cs.primary,
+                      foregroundColor: cs.onPrimary,
+                      fontWeight: FontWeight.w700,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 7),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Problem Statement & Starter Files Card
             ExpressiveCard(
               borderRadius: 24,
               padding: const EdgeInsets.all(16),
@@ -358,220 +315,292 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
                         size: 38,
                         radius: 12,
                         iconSize: 20,
-                        icon: Icons.rate_review_outlined,
+                        icon: Icons.description_outlined,
+                        backgroundColor: cs.secondaryFixed,
+                        iconColor: cs.onSecondaryFixed,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          s.problemStatement,
+                          style: tt.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (a.intro.isNotEmpty)
+                    SelectableText(
+                      a.intro,
+                      style: tt.bodyMedium?.copyWith(
+                        color: cs.onSurface,
+                        height: 1.5,
+                      ),
+                    )
+                  else
+                    Text(
+                      s.noDescriptionProvided,
+                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  if (a.files.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      s.attachedFiles.toUpperCase(),
+                      style: tt.labelSmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.7,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    for (final f in a.files) _buildFileTile(f, cs, tt),
+                  ],
+                ],
+              ),
+            ),
+
+            // Instructor Feedback Card
+            if (a.feedbackComment.isNotEmpty ||
+                a.gradeDisplay != null ||
+                a.isSubmitted) ...[
+              const SizedBox(height: 14),
+              ExpressiveCard(
+                borderRadius: 24,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        SquircleIcon(
+                          size: 38,
+                          radius: 12,
+                          iconSize: 20,
+                          icon: Icons.rate_review_outlined,
+                          backgroundColor: cs.primaryFixed,
+                          iconColor: cs.onPrimaryFixed,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            s.professorFeedback,
+                            style: tt.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (a.gradeDisplay != null)
+                          ExpressivePill(
+                            label: a.gradeDisplay!,
+                            backgroundColor: cs.primaryFixed,
+                            foregroundColor: cs.onPrimaryFixed,
+                            fontWeight: FontWeight.w800,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (a.feedbackComment.isNotEmpty)
+                      SelectableText(
+                        a.feedbackComment,
+                        style: tt.bodyMedium?.copyWith(height: 1.45),
+                      )
+                    else
+                      Text(
+                        s.noInstructorComment,
+                        style: tt.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+
+            // Submission Portal Card (Stitch #12)
+            ExpressiveCard(
+              borderRadius: 24,
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      SquircleIcon(
+                        size: 38,
+                        radius: 12,
+                        iconSize: 20,
+                        icon: Icons.cloud_upload_outlined,
                         backgroundColor: cs.primaryFixed,
                         iconColor: cs.onPrimaryFixed,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          s.professorFeedback,
+                          s.submissionPortal,
                           style: tt.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
-                      if (a.gradeDisplay != null)
-                        ExpressivePill(
-                          label: a.gradeDisplay!,
-                          backgroundColor: cs.primaryFixed,
-                          foregroundColor: cs.onPrimaryFixed,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      ExpressivePill(
+                        label: a.isGradedOnly
+                            ? s.gradedLabel
+                            : (a.isSubmitted
+                                ? s.submitted
+                                : (a.isDraft ? s.draftStatus : s.notSubmitted)),
+                        backgroundColor: a.isSubmitted
+                            ? cs.secondaryFixed
+                            : (a.isDraft
+                                ? cs.tertiaryContainer
+                                : cs.errorContainer),
+                        foregroundColor: a.isSubmitted
+                            ? cs.onSecondaryFixed
+                            : (a.isDraft
+                                ? cs.onTertiaryContainer
+                                : cs.onErrorContainer),
+                        fontWeight: FontWeight.w700,
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  if (a.feedbackComment.isNotEmpty)
-                    SelectableText(
-                      a.feedbackComment,
-                      style: tt.bodyMedium?.copyWith(height: 1.45),
-                    )
-                  else
+                  if (a.submittedFiles.isNotEmpty) ...[
+                    const SizedBox(height: 14),
                     Text(
-                      s.noInstructorComment,
-                      style: tt.bodyMedium?.copyWith(
+                      s.submittedFilesLabel.toUpperCase(),
+                      style: tt.labelSmall?.copyWith(
                         color: cs.onSurfaceVariant,
-                        fontStyle: FontStyle.italic,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.7,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    for (final sf in a.submittedFiles)
+                      _buildFileTile(sf, cs, tt),
+                  ],
+                  if (!a.isGradedOnly) ...[
+                    const SizedBox(height: 14),
+                    if (a.assignId == null)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text(
+                          s.uploadOnlyInWebHint,
+                          style: tt.bodySmall
+                              ?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                      )
+                    else ...[
+                      Material(
+                        color: cs.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(18),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: _submitting ? null : _pickFile,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 18),
+                            child: Column(
+                              children: [
+                                SquircleIcon(
+                                  size: 44,
+                                  radius: 14,
+                                  iconSize: 22,
+                                  icon: Icons.upload_file_rounded,
+                                  backgroundColor: cs.primaryFixed,
+                                  iconColor: cs.onPrimaryFixed,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _pickedFile == null
+                                      ? s.pickFileToUpload
+                                      : s.changeFile,
+                                  style: tt.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                if (_pickedFile != null) ...[
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 7),
+                                    decoration: BoxDecoration(
+                                      color: cs.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          iconForFileName(_pickedFile!.name),
+                                          size: 16,
+                                          color: cs.primary,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Flexible(
+                                          child: Text(
+                                            '${_pickedFile!.name} (${formatFileSize(_pickedFile!.size)})',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: tt.labelSmall?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        GestureDetector(
+                                          onTap: () => setState(
+                                              () => _pickedFile = null),
+                                          child: Icon(Icons.close_rounded,
+                                              size: 16,
+                                              color: cs.onSurfaceVariant),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      CheckboxListTile(
+                        key: const ValueKey('ad_honor_checkbox'),
+                        value: _honorCodeChecked,
+                        onChanged: _submitting
+                            ? null
+                            : (v) {
+                                AppHaptics.selection();
+                                setState(() => _honorCodeChecked = v ?? false);
+                              },
+                        contentPadding: EdgeInsets.zero,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        title: Text(
+                          s.honorCodeLabel,
+                          style: tt.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        subtitle: Text(
+                          s.honorCodeSub,
+                          style: tt.bodySmall
+                              ?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
+                  ],
                 ],
               ),
             ),
           ],
-          const SizedBox(height: 14),
-
-          // Submission Portal Card (Stitch #12)
-          ExpressiveCard(
-            borderRadius: 24,
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    SquircleIcon(
-                      size: 38,
-                      radius: 12,
-                      iconSize: 20,
-                      icon: Icons.cloud_upload_outlined,
-                      backgroundColor: cs.primaryFixed,
-                      iconColor: cs.onPrimaryFixed,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        s.submissionPortal,
-                        style: tt.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    ExpressivePill(
-                      label: a.isGradedOnly
-                          ? s.gradedLabel
-                          : (a.isSubmitted ? s.submitted : s.notSubmitted),
-                      backgroundColor: a.isSubmitted
-                          ? cs.secondaryFixed
-                          : cs.errorContainer,
-                      foregroundColor: a.isSubmitted
-                          ? cs.onSecondaryFixed
-                          : cs.onErrorContainer,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ],
-                ),
-                if (a.submittedFiles.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  Text(
-                    s.submittedFilesLabel.toUpperCase(),
-                    style: tt.labelSmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.7,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  for (final sf in a.submittedFiles) _buildFileTile(sf, cs, tt),
-                ],
-                if (!a.isGradedOnly) ...[
-                  const SizedBox(height: 14),
-                  if (a.assignId == null)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Text(
-                        s.uploadOnlyInWebHint,
-                        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                      ),
-                    )
-                  else ...[
-                    Material(
-                      color: cs.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(18),
-                      clipBehavior: Clip.antiAlias,
-                      child: InkWell(
-                        onTap: _submitting ? null : _pickFile,
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 18),
-                          child: Column(
-                            children: [
-                              SquircleIcon(
-                                size: 44,
-                                radius: 14,
-                                iconSize: 22,
-                                icon: Icons.upload_file_rounded,
-                                backgroundColor: cs.primaryFixed,
-                                iconColor: cs.onPrimaryFixed,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _pickedFile == null
-                                    ? s.pickFileToUpload
-                                    : s.changeFile,
-                                style: tt.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              if (_pickedFile != null) ...[
-                                const SizedBox(height: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 7),
-                                  decoration: BoxDecoration(
-                                    color: cs.surfaceContainerHighest,
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        iconForFileName(_pickedFile!.name),
-                                        size: 16,
-                                        color: cs.primary,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Flexible(
-                                        child: Text(
-                                          '${_pickedFile!.name} (${formatFileSize(_pickedFile!.size)})',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: tt.labelSmall?.copyWith(
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      GestureDetector(
-                                        onTap: () =>
-                                            setState(() => _pickedFile = null),
-                                        child: Icon(Icons.close_rounded,
-                                            size: 16,
-                                            color: cs.onSurfaceVariant),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    CheckboxListTile(
-                      key: const ValueKey('ad_honor_checkbox'),
-                      value: _honorCodeChecked,
-                      onChanged: _submitting
-                          ? null
-                          : (v) {
-                              AppHaptics.selection();
-                              setState(() => _honorCodeChecked = v ?? false);
-                            },
-                      contentPadding: EdgeInsets.zero,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      title: Text(
-                        s.honorCodeLabel,
-                        style: tt.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      subtitle: Text(
-                        s.honorCodeSub,
-                        style:
-                            tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                      ),
-                    ),
-                  ],
-                ],
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -628,8 +657,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
                           color: cs.primary,
                         ),
                       )
-                    : Icon(Icons.download_rounded,
-                        size: 20, color: cs.primary),
+                    : Icon(Icons.download_rounded, size: 20, color: cs.primary),
               ],
             ),
           ),
