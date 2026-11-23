@@ -849,6 +849,13 @@ class S {
   String get crashBannerViewOnlyBtn =>
       isRu ? 'Открыть без включения' : 'View Report Only';
   String get crashBannerDismissBtn => isRu ? 'Не сейчас' : 'Not Now';
+  String get crashBannerReportBtn =>
+      isRu ? 'Отправить на GitHub' : 'Report on GitHub';
+  String get logsReportGithubBtn =>
+      isRu ? 'Создать Issue на GitHub' : 'Open GitHub Issue';
+  String get logsReportOpenFailedToast => isRu
+      ? 'Не удалось открыть GitHub — отчёт скопирован в буфер'
+      : 'Could not open GitHub — report copied to clipboard';
 
   String get privacyCardLogsOverline =>
       isRu ? 'ДИАГНОСТИКА ПО ЖЕЛАНИЮ' : 'OPTIONAL DIAGNOSTICS';

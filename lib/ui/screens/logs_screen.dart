@@ -1,14 +1,46 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/app_logger.dart';
+import '../../services/update_service.dart';
 import '../../state/app_state.dart';
 import '../widgets/app_haptics.dart';
 import '../widgets/expressive_widgets.dart';
 
 class LogsScreen extends StatefulWidget {
   const LogsScreen({super.key});
+
+  /// Opens a pre-filled GitHub Issue in the external browser and falls back
+  /// to copying the Markdown crash/log report if launching the URL fails.
+  static Future<void> openGithubIssue(
+    BuildContext context, {
+    required String fallbackToast,
+  }) async {
+    final uri = AppLogger.instance.buildGithubIssueUri(
+      repoWebUrl: UpdateService.repoWebUrl,
+      appVersion: UpdateService.currentVersion,
+    );
+    var launched = false;
+    try {
+      launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      launched = false;
+    }
+    if (!launched) {
+      await Clipboard.setData(
+        ClipboardData(
+          text: AppLogger.instance.buildCrashReportMarkdown(
+            appVersion: UpdateService.currentVersion,
+          ),
+        ),
+      );
+      if (context.mounted) {
+        showQuickToast(context, fallbackToast);
+      }
+    }
+  }
 
   @override
   State<LogsScreen> createState() => _LogsScreenState();
@@ -211,6 +243,31 @@ class _LogsScreenState extends State<LogsScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.tonalIcon(
+                        key: const ValueKey('logs_github_issue_btn'),
+                        onPressed: () async {
+                          AppHaptics.medium();
+                          await LogsScreen.openGithubIssue(
+                            context,
+                            fallbackToast: s.logsReportOpenFailedToast,
+                          );
+                        },
+                        style: FilledButton.styleFrom(
+                          shape: const StadiumBorder(),
+                        ),
+                        icon: const Icon(Icons.open_in_new_rounded, size: 17),
+                        label: Text(
+                          s.logsReportGithubBtn,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: tt.labelLarge
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ),
                     ),
                   ],
                 ),

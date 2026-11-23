@@ -90,6 +90,34 @@ class HomeShell extends StatelessWidget {
                           runSpacing: 6,
                           children: [
                             FilledButton.icon(
+                              key: const ValueKey('crash_report_github_btn'),
+                              onPressed: () async {
+                                AppHaptics.medium();
+                                await LogsScreen.openGithubIssue(
+                                  context,
+                                  fallbackToast: s.logsReportOpenFailedToast,
+                                );
+                                await AppLogger.instance.dismissCrashPrompt();
+                              },
+                              style: FilledButton.styleFrom(
+                                backgroundColor: cs.error,
+                                foregroundColor: cs.onError,
+                                shape: const StadiumBorder(),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                minimumSize: const Size(0, 36),
+                              ),
+                              icon: const Icon(Icons.open_in_new_rounded,
+                                  size: 16),
+                              label: Text(
+                                s.crashBannerReportBtn,
+                                style: tt.labelMedium?.copyWith(
+                                  color: cs.onError,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            FilledButton.tonalIcon(
                               key: const ValueKey('crash_enable_logs_btn'),
                               onPressed: () async {
                                 AppHaptics.medium();
@@ -107,8 +135,9 @@ class HomeShell extends StatelessWidget {
                                 }
                               },
                               style: FilledButton.styleFrom(
-                                backgroundColor: cs.error,
-                                foregroundColor: cs.onError,
+                                backgroundColor: cs.onErrorContainer
+                                    .withValues(alpha: 0.14),
+                                foregroundColor: cs.onErrorContainer,
                                 shape: const StadiumBorder(),
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 12, vertical: 8),
@@ -119,7 +148,7 @@ class HomeShell extends StatelessWidget {
                               label: Text(
                                 s.crashBannerEnableBtn,
                                 style: tt.labelMedium?.copyWith(
-                                  color: cs.onError,
+                                  color: cs.onErrorContainer,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),

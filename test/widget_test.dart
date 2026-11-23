@@ -1460,6 +1460,20 @@ void main() {
     expect(
         AppLogger.instance.entries.first.message, isNot(contains('secret999')));
 
+    final issueUri = AppLogger.instance.buildGithubIssueUri(
+      repoWebUrl: 'https://github.com/crewles/inha-app',
+      appVersion: '1.2.2',
+      platformOverride: 'android',
+    );
+    expect(issueUri.host, 'github.com');
+    expect(issueUri.path, '/crewles/inha-app/issues/new');
+    expect(issueUri.queryParameters['labels'], 'bug');
+    expect(issueUri.queryParameters['title'], startsWith('[Crash]'));
+    expect(issueUri.queryParameters['title'], isNot(contains('U2210001')));
+    expect(issueUri.queryParameters['body'], isNot(contains('U2210001')));
+    expect(issueUri.queryParameters['body'], isNot(contains('secret999')));
+    expect(issueUri.toString().length, lessThan(7500));
+
     expect(
       EclassService.isCustomAvatarUrl(
           'https://eclass.inha.ac.kr/theme/image.php/coursemosv2/core/123/u/f1'),
@@ -1485,6 +1499,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('crash_prompt_banner')), findsOneWidget);
+    expect(find.byKey(const ValueKey('crash_report_github_btn')), findsOneWidget);
     expect(find.byKey(const ValueKey('crash_enable_logs_btn')), findsOneWidget);
     expect(find.byKey(const ValueKey('crash_dismiss_btn')), findsOneWidget);
 
@@ -1496,6 +1511,7 @@ void main() {
     await tester.pumpWidget(_wrap(app, const LogsScreen()));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('logs_opt_in_switch')), findsOneWidget);
+    expect(find.byKey(const ValueKey('logs_github_issue_btn')), findsOneWidget);
     expect(find.textContaining('Simulated crash'), findsOneWidget);
 
     await AppLogger.instance.clear();

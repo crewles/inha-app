@@ -234,6 +234,98 @@ class AppLogger extends ChangeNotifier {
     return entries.map((e) => e.formatLine()).join('\n');
   }
 
+  static String _trimSingleLine(String input, int maxLen) {
+    final collapsed = input.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (collapsed.length <= maxLen) return collapsed;
+    if (maxLen <= 3) return collapsed.substring(0, maxLen);
+    return '${collapsed.substring(0, maxLen - 3)}...';
+  }
+
+  /// Builds a sanitized Markdown bug/crash report kept within [maxLength]
+  /// so it fits safely inside a GitHub `issues/new` URL query parameter.
+  String buildCrashReportMarkdown({
+    required String appVersion,
+    String? platformOverride,
+    int maxLength = 3500,
+  }) {
+    final platform = platformOverride ??
+        (kIsWeb
+            ? 'web'
+            : '${Platform.operatingSystem} (${_trimSingleLine(sanitize(Platform.operatingSystemVersion), 80)})');
+    final buf = StringBuffer()
+      ..writeln('## Environment')
+      ..writeln('- **App version:** $appVersion')
+      ..writeln('- **Platform:** $platform')
+      ..writeln('- **Time (UTC):** ${DateTime.now().toUtc().toIso8601String()}')
+      ..writeln()
+      ..writeln('## What happened')
+      ..writeln('<!-- Describe what you were doing right before the error (optional) -->');
+
+    final crash = lastCrashEntry;
+    if (crash != null) {
+      final rawCrash = crash.formatLine();
+      final crashText = rawCrash.length > 1600
+          ? '${rawCrash.substring(0, 1597)}...'
+          : rawCrash;
+      buf
+        ..writeln()
+        ..writeln('## Crash Details')
+        ..writeln('```text')
+        ..writeln(crashText)
+        ..writeln('```');
+    }
+
+    if (_entries.isNotEmpty) {
+      final start = _entries.length > 12 ? _entries.length - 12 : 0;
+      final recent = _entries.sublist(start);
+      const header = '\n## Recent Logs\n```text\n';
+      const footer = '```';
+      if (buf.length + header.length + footer.length < maxLength) {
+        final logBuf = StringBuffer();
+        for (final entry in recent) {
+          final line = '${entry.formatLine()}\n';
+          if (buf.length + header.length + logBuf.length + line.length + footer.length >
+              maxLength) {
+            break;
+          }
+          logBuf.write(line);
+        }
+        if (logBuf.isNotEmpty) {
+          buf
+            ..write(header)
+            ..write(logBuf.toString())
+            ..write(footer);
+        }
+      }
+    }
+
+    final result = buf.toString().trimRight();
+    return result.length <= maxLength ? result : result.substring(0, maxLength);
+  }
+
+  /// Builds a pre-filled GitHub `issues/new` URI with sanitized crash context.
+  Uri buildGithubIssueUri({
+    required String repoWebUrl,
+    required String appVersion,
+    String? platformOverride,
+  }) {
+    final crash = lastCrashEntry;
+    final title = crash != null
+        ? '[Crash] ${_trimSingleLine(crash.message, 72)}'
+        : '[Bug] Diagnostic report (v$appVersion)';
+    final body = buildCrashReportMarkdown(
+      appVersion: appVersion,
+      platformOverride: platformOverride,
+    );
+    return Uri.parse('$repoWebUrl/issues/new').replace(
+      queryParameters: {
+        'title': title,
+        'labels': 'bug',
+        'body': body,
+      },
+    );
+  }
+
   void _append(LogEntry entry) {
     _addToMemory(entry);
     _notifySafely();

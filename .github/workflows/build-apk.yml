@@ -25,6 +25,7 @@ jobs:
     outputs:
       tag: ${{ steps.ver.outputs.tag }}
       version: ${{ steps.ver.outputs.version }}
+      ios_build_name: ${{ steps.ver.outputs.ios_build_name }}
       is_prerelease: ${{ steps.ver.outputs.is_prerelease }}
     steps:
       - uses: actions/checkout@v4
@@ -36,12 +37,14 @@ jobs:
             TAG="${GITHUB_REF_NAME}"
             VERSION="${TAG#v}"
             BASE_TAG_VER="${VERSION%%-*}"
+            IOS_BUILD_NAME="$BASE_TAG_VER"
             if [ "$BASE_TAG_VER" != "$PUBSPEC_VER" ]; then
               echo "::warning::Tag version ($VERSION) differs from pubspec.yaml ($PUBSPEC_VER); building artifacts with --build-name=$VERSION"
             fi
           else
             VERSION="$PUBSPEC_VER"
             TAG="v${VERSION}"
+            IOS_BUILD_NAME="$PUBSPEC_VER"
           fi
 
           if echo "$TAG" | grep -q '-'; then
@@ -52,8 +55,9 @@ jobs:
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "ios_build_name=$IOS_BUILD_NAME" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
-          echo "Resolved release tag=$TAG version=$VERSION prerelease=$IS_PRERELEASE"
+          echo "Resolved release tag=$TAG version=$VERSION ios_build_name=$IOS_BUILD_NAME prerelease=$IS_PRERELEASE"
 
   build-android:
     needs: resolve-version
@@ -122,7 +126,7 @@ jobs:
         run: flutter pub get
 
       - name: Build unsigned iOS app
-        run: flutter build ios --release --no-codesign --build-name="${{ needs.resolve-version.outputs.version }}" --build-number=$((100 + GITHUB_RUN_NUMBER))
+        run: flutter build ios --release --no-codesign --build-name="${{ needs.resolve-version.outputs.ios_build_name }}" --build-number=$((100 + GITHUB_RUN_NUMBER))
 
       - name: Package unsigned IPA
         run: |
