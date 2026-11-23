@@ -784,6 +784,7 @@ class AppState extends ChangeNotifier {
   // ── Settings & Reminders ────────────────────────────────────
 
   Future<void> updateSettings(AppSettings updated) async {
+    final prev = settings;
     settings = updated;
     AppHaptics.enabled = updated.hapticsEnabled;
     await _db.saveSetting('theme_mode', updated.themeMode);
@@ -813,12 +814,35 @@ class AppState extends ChangeNotifier {
     AppLogger.instance.enabled = updated.diagnosticsEnabled;
     notifyListeners();
 
-    await _rescheduleAllNotifications();
-    await NotificationService.instance.configureBackgroundSync(
-      enabled: isLoggedIn && updated.bgSyncEnabled,
-      intervalHours: updated.bgSyncIntervalHours,
-    );
-    await UpdateService.refreshHomeWidgets();
+    final classRemindersChanged =
+        prev.notifyTimetable != updated.notifyTimetable ||
+            prev.reminderOffsetMinutes != updated.reminderOffsetMinutes ||
+            prev.timetableGroup != updated.timetableGroup ||
+            prev.language != updated.language;
+    final deadlineRemindersChanged =
+        prev.notifyAssignments != updated.notifyAssignments ||
+            prev.language != updated.language;
+    final bgSyncChanged = prev.bgSyncEnabled != updated.bgSyncEnabled ||
+        prev.bgSyncIntervalHours != updated.bgSyncIntervalHours;
+    final widgetsChanged = prev.timetableGroup != updated.timetableGroup ||
+        prev.language != updated.language ||
+        prev.hideSubmitted != updated.hideSubmitted;
+
+    if (classRemindersChanged) {
+      await _rescheduleClassReminders();
+    }
+    if (deadlineRemindersChanged) {
+      await _rescheduleDeadlineReminders();
+    }
+    if (bgSyncChanged) {
+      await NotificationService.instance.configureBackgroundSync(
+        enabled: isLoggedIn && updated.bgSyncEnabled,
+        intervalHours: updated.bgSyncIntervalHours,
+      );
+    }
+    if (widgetsChanged) {
+      await UpdateService.refreshHomeWidgets();
+    }
   }
 
   Future<void> _rescheduleAllNotifications() async {

@@ -1435,11 +1435,13 @@ void main() {
     AppLogger.instance.enabled = false;
 
     final cleaned = AppLogger.sanitize(
-      'Login U2210001 password=MySecret123 wstoken=abcdef0123456789abcdef0123456789 Cookie: MoodleSession=sess12345',
+      'Login U2210001 password=MySecret123 wstoken=abcdef0123456789abcdef0123456789 sesskey=abc123XYZ draftitemid=98765 Cookie: MoodleSession=sess12345',
     );
     expect(cleaned, isNot(contains('MySecret123')));
     expect(cleaned, isNot(contains('U2210001')));
     expect(cleaned, isNot(contains('abcdef0123456789abcdef0123456789')));
+    expect(cleaned, isNot(contains('abc123XYZ')));
+    expect(cleaned, isNot(contains('98765')));
     expect(cleaned, isNot(contains('sess12345')));
     expect(cleaned, contains('U*******'));
     expect(cleaned, contains('***'));

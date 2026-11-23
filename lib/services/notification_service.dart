@@ -203,6 +203,17 @@ class NotificationService {
     );
   }
 
+  Future<void> _cancelPendingInRange(int startInclusive, int endExclusive) async {
+    try {
+      final pending = await _plugin.pendingNotificationRequests();
+      for (final req in pending) {
+        if (req.id >= startInclusive && req.id < endExclusive) {
+          await _plugin.cancel(req.id);
+        }
+      }
+    } catch (_) {}
+  }
+
   // ── Offline Scheduled Class Reminders (Weekly, Asia/Tashkent) ──
 
   Future<void> rescheduleClassReminders({
@@ -214,9 +225,7 @@ class NotificationService {
     if (!_initialized) await init();
 
     // Clear previous class reminder IDs (range 1000..1199)
-    for (int id = 1000; id < 1200; id++) {
-      await _plugin.cancel(id);
-    }
+    await _cancelPendingInRange(1000, 1200);
     if (!enabled || groupEntries.isEmpty) return;
 
     const details = NotificationDetails(
@@ -296,9 +305,7 @@ class NotificationService {
     if (!_initialized) await init();
 
     // Clear previous deadline reminder IDs (range 2000..2299)
-    for (int id = 2000; id < 2300; id++) {
-      await _plugin.cancel(id);
-    }
+    await _cancelPendingInRange(2000, 2300);
     if (!enabled) return;
 
     const details = NotificationDetails(

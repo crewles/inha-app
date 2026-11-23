@@ -671,8 +671,9 @@ class EclassService {
       }
     } catch (_) {}
 
-    // 2. Supplement/upgrade URLs with Moodle WS core_files_get_files (user/private)
-    if (_apiToken != null || (_username != null && _password != null)) {
+    // 2. Fallback to Moodle WS core_files_get_files if web HTML returned empty
+    if (byId.isEmpty &&
+        (_apiToken != null || (_username != null && _password != null))) {
       try {
         final uid = await _getUserId();
         final queue = <String>['/'];
@@ -766,16 +767,29 @@ class EclassService {
       }
     }
 
+    String safeTargetName(EclassPrivateFile f) {
+      final folderPrefix = f.filepath
+          .replaceAll(RegExp(r'^/+|/+$'), '')
+          .replaceAll(RegExp(r'[\\/:*?"<>|]+'), '_')
+          .trim();
+      return folderPrefix.isEmpty
+          ? f.filename
+          : '${folderPrefix}__${f.filename}';
+    }
+
     if (file.downloadUrl.isNotEmpty) {
       try {
         final saved = await downloadFile(
           file.downloadUrl,
-          file.filename,
+          safeTargetName(file),
           onProgress: onProgress,
         );
         if (!await looksLikeHtmlError(saved)) {
           return saved;
         }
+        try {
+          await File(saved).delete();
+        } catch (_) {}
       } catch (_) {}
     }
 
@@ -791,7 +805,7 @@ class EclassService {
     }
     return downloadFile(
       match.downloadUrl,
-      match.filename,
+      safeTargetName(match),
       onProgress: onProgress,
     );
   }

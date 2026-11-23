@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -64,7 +65,7 @@ class AppLogger extends ChangeNotifier {
   static const String _fileName = 'app_logs.json';
 
   static final RegExp _secretKvRx = RegExp(
-    r'(password|eclass_password|ins_password|txtpw|wstoken|token|moodlesession|asp\.net_sessionid|cookie|authorization)(\s*[=:]\s*["\x27]?|\s+)([^\s&",}\]\x27]+)',
+    r'(password|eclass_password|ins_password|txtpw|wstoken|token|moodlesession|asp\.net_sessionid|sesskey|draftitemid|cookie|authorization)(\s*[=:]\s*["\x27]?|\s+)([^\s&",}\]\x27]+)',
     caseSensitive: false,
   );
   static final RegExp _hexTokenRx = RegExp(r'\b[a-fA-F0-9]{32}\b');
@@ -74,9 +75,28 @@ class AppLogger extends ChangeNotifier {
   bool hasPendingCrashPrompt = false;
   LogEntry? lastCrashEntry;
   final List<LogEntry> _entries = [];
+  bool _isRecordingCrash = false;
+  Future<void> _persistQueue = Future.value();
 
   @visibleForTesting
   bool persistToDisk = true;
+
+  void _notifySafely() {
+    if (!hasListeners) return;
+    SchedulerPhase? phase;
+    try {
+      phase = SchedulerBinding.instance.schedulerPhase;
+    } catch (_) {}
+    if (phase == SchedulerPhase.persistentCallbacks) {
+      try {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (hasListeners) notifyListeners();
+        });
+        return;
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
 
   List<LogEntry> get entries => List.unmodifiable(_entries.reversed);
 
@@ -133,21 +153,28 @@ class AppLogger extends ChangeNotifier {
     StackTrace? stack,
     String tag = 'CRASH',
   ]) async {
-    final stackStr = stack?.toString().trim() ?? '';
-    final shortStack =
-        stackStr.length > 1500 ? '${stackStr.substring(0, 1500)}...' : stackStr;
-    final entry = LogEntry(
-      timestamp: DateTime.now(),
-      level: LogLevel.crash,
-      tag: sanitize(tag),
-      message: sanitize(error.toString()),
-      details: shortStack.isEmpty ? null : sanitize(shortStack),
-    );
-    lastCrashEntry = entry;
-    hasPendingCrashPrompt = true;
-    _addToMemory(entry);
-    notifyListeners();
-    await _persist();
+    if (_isRecordingCrash) return;
+    _isRecordingCrash = true;
+    try {
+      final stackStr = stack?.toString().trim() ?? '';
+      final shortStack = stackStr.length > 1500
+          ? '${stackStr.substring(0, 1500)}...'
+          : stackStr;
+      final entry = LogEntry(
+        timestamp: DateTime.now(),
+        level: LogLevel.crash,
+        tag: sanitize(tag),
+        message: sanitize(error.toString()),
+        details: shortStack.isEmpty ? null : sanitize(shortStack),
+      );
+      lastCrashEntry = entry;
+      hasPendingCrashPrompt = true;
+      _addToMemory(entry);
+      _notifySafely();
+      await _persist();
+    } finally {
+      _isRecordingCrash = false;
+    }
   }
 
   Future<void> init({required bool enabled}) async {
@@ -173,7 +200,7 @@ class AppLogger extends ChangeNotifier {
               break;
             }
           }
-          notifyListeners();
+          _notifySafely();
         }
       }
     } catch (_) {}
@@ -181,7 +208,7 @@ class AppLogger extends ChangeNotifier {
 
   Future<void> dismissCrashPrompt() async {
     hasPendingCrashPrompt = false;
-    notifyListeners();
+    _notifySafely();
     await _persist();
   }
 
@@ -189,14 +216,17 @@ class AppLogger extends ChangeNotifier {
     _entries.clear();
     hasPendingCrashPrompt = false;
     lastCrashEntry = null;
-    notifyListeners();
+    _notifySafely();
     if (!persistToDisk) return;
-    try {
-      final file = await _logFile();
-      if (await file.exists()) {
-        await file.delete();
-      }
-    } catch (_) {}
+    _persistQueue = _persistQueue.then((_) async {
+      try {
+        final file = await _logFile();
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {}
+    });
+    await _persistQueue;
   }
 
   String exportText() {
@@ -206,7 +236,7 @@ class AppLogger extends ChangeNotifier {
 
   void _append(LogEntry entry) {
     _addToMemory(entry);
-    notifyListeners();
+    _notifySafely();
     _persist();
   }
 
@@ -222,15 +252,23 @@ class AppLogger extends ChangeNotifier {
     return File(p.join(dir.path, _fileName));
   }
 
-  Future<void> _persist() async {
-    if (!persistToDisk) return;
-    try {
-      final file = await _logFile();
-      final payload = jsonEncode({
-        'pendingCrashPrompt': hasPendingCrashPrompt,
-        'entries': _entries.map((e) => e.toJson()).toList(),
-      });
-      await file.writeAsString(payload);
-    } catch (_) {}
+  Future<void> _persist() {
+    if (!persistToDisk) return Future.value();
+    final payload = jsonEncode({
+      'pendingCrashPrompt': hasPendingCrashPrompt,
+      'entries': _entries.map((e) => e.toJson()).toList(),
+    });
+    _persistQueue = _persistQueue.then((_) async {
+      try {
+        final file = await _logFile();
+        final tmpFile = File('${file.path}.tmp');
+        await tmpFile.writeAsString(payload, flush: true);
+        if (await file.exists()) {
+          await file.delete();
+        }
+        await tmpFile.rename(file.path);
+      } catch (_) {}
+    });
+    return _persistQueue;
   }
 }

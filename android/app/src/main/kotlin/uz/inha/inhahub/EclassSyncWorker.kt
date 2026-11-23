@@ -77,6 +77,15 @@ class EclassSyncWorker(
                     .append(URLEncoder.encode(cid, "UTF-8"))
             }
 
+            val prefs = applicationContext.getSharedPreferences(
+                "inha_bg_sync_prefs",
+                Context.MODE_PRIVATE
+            )
+            val alreadyNotified = prefs
+                .getStringSet("notified_assignment_ids", emptySet())
+                ?.toHashSet() ?: HashSet()
+            val pruned = alreadyNotified.removeAll { knownAssignmentIds.contains(it) }
+
             val conn = (URL("https://eclass.inha.ac.kr/webservice/rest/server.php")
                 .openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -90,38 +99,52 @@ class EclassSyncWorker(
                 setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             }
 
-            conn.outputStream.use { it.write(params.toString().toByteArray(Charsets.UTF_8)) }
-            if (conn.responseCode != 200) return Result.retry()
+            try {
+                conn.outputStream.use { it.write(params.toString().toByteArray(Charsets.UTF_8)) }
+                if (conn.responseCode != 200) return Result.retry()
 
-            val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            val root = JSONObject(body)
-            if (root.has("exception")) return Result.success()
+                val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val root = JSONObject(body)
+                if (root.has("exception")) return Result.success()
 
-            val coursesArr = root.optJSONArray("courses") ?: return Result.success()
-            val newItems = ArrayList<Pair<String, String>>()
+                val coursesArr = root.optJSONArray("courses") ?: return Result.success()
+                val newItems = ArrayList<Pair<String, String>>()
+                val newlyNotifiedKeys = ArrayList<String>()
 
-            for (i in 0 until coursesArr.length()) {
-                val courseObj = coursesArr.getJSONObject(i)
-                val cid = courseObj.optString("id")
-                val cname = courseObj.optString("fullname", courseObj.optString("shortname"))
-                    .replace(Regex("\\[.*?\\]"), "")
-                    .trim()
-                val assigns = courseObj.optJSONArray("assignments") ?: continue
-                for (j in 0 until assigns.length()) {
-                    val a = assigns.getJSONObject(j)
-                    val aid = a.optInt("id", 0)
-                    val aname = a.optString("name", "").trim()
-                    val key = "$cid::$aid"
-                    if (aid > 0 && !knownAssignmentIds.contains(key) && !hiddenAssignmentIds.contains(key)) {
-                        newItems.add(Pair(cname, aname))
+                for (i in 0 until coursesArr.length()) {
+                    val courseObj = coursesArr.getJSONObject(i)
+                    val cid = courseObj.optString("id")
+                    val cname = courseObj.optString("fullname", courseObj.optString("shortname"))
+                        .replace(Regex("\\[.*?\\]"), "")
+                        .trim()
+                    val assigns = courseObj.optJSONArray("assignments") ?: continue
+                    for (j in 0 until assigns.length()) {
+                        val a = assigns.getJSONObject(j)
+                        val aid = a.optInt("id", 0)
+                        val aname = a.optString("name", "").trim()
+                        val key = "$cid::$aid"
+                        if (aid > 0 &&
+                            !knownAssignmentIds.contains(key) &&
+                            !hiddenAssignmentIds.contains(key) &&
+                            !alreadyNotified.contains(key)
+                        ) {
+                            newItems.add(Pair(cname, aname))
+                            newlyNotifiedKeys.add(key)
+                        }
                     }
                 }
-            }
 
-            if (newItems.isNotEmpty()) {
-                showNotification(newItems)
+                if (newItems.isNotEmpty()) {
+                    showNotification(newItems)
+                    alreadyNotified.addAll(newlyNotifiedKeys)
+                }
+                if (pruned || newlyNotifiedKeys.isNotEmpty()) {
+                    prefs.edit().putStringSet("notified_assignment_ids", alreadyNotified).apply()
+                }
+                WidgetUpdater.updateAll(applicationContext)
+            } finally {
+                conn.disconnect()
             }
-            WidgetUpdater.updateAll(applicationContext)
         } catch (_: Exception) {
             return Result.retry()
         }
