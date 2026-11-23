@@ -7,9 +7,10 @@
 **Нативный мобильный клиент для студентов Inha University in Tashkent (IUT)**  
 `eClass` • `INS Portal` • `EduPage Timetable` • `Material 3 Expressive` • `Offline-First SQLite`
 
-[![Version](https://img.shields.io/badge/version-1.2.0-1D4ED8?style=for-the-badge)](https://github.com/crewles/inha-app/releases)
+[![Version](https://img.shields.io/badge/version-1.2.2-1D4ED8?style=for-the-badge)](https://github.com/crewles/inha-app/releases)
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
 [![Android](https://img.shields.io/badge/Android-7.0%2B%20(arm64)-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/crewles/inha-app/releases/latest)
+[![iOS](https://img.shields.io/badge/iOS-13.0%2B%20(IPA)-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/crewles/inha-app/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-0F172A?style=for-the-badge)](LICENSE)
 
 </div>
@@ -81,8 +82,44 @@
 
 ## Установка и сборка
 
-### Скачать готовый APK
+### Android (`.apk`)
 Последняя сборка `arm64-v8a` доступна в разделе [**GitHub Releases**](https://github.com/crewles/inha-app/releases/latest).
+
+### Установка на iOS (iPhone / iPad)
+
+> Приложение не опубликовано в App Store, поэтому в [GitHub Releases](https://github.com/crewles/inha-app/releases/latest) выкладывается неподписанный файл **`inha-app-v...-ios-unsigned.ipa`**. Установить его можно бесплатно с обычным Apple ID без джейлбрейка.
+
+#### Способ 1 — Через компьютер (Sideloadly) — самый простой
+Подходит для **Windows** и **macOS**.
+
+1. Скачайте последний **`inha-app-v...-ios-unsigned.ipa`** в разделе [GitHub Releases](https://github.com/crewles/inha-app/releases/latest).
+2. Установите [Sideloadly](https://sideloadly.io/) на ПК (на Windows также понадобятся iTunes и iCloud с сайта Apple — не из Microsoft Store).
+3. Подключите iPhone к компьютеру кабелем и нажмите **«Доверять»** на экране телефона.
+4. Откройте Sideloadly, перетащите файл `.ipa`, введите свой **Apple ID** и нажмите **Start**.
+5. После установки на iPhone перейдите в:
+   - **Настройки → Основные → VPN и управление устройством** → выберите свой Apple ID → **Доверять**.
+   - **Настройки → Конфиденциальность и безопасность → Режим разработчика** → включите тумблер *(на iOS 16+, может потребоваться перезагрузка)*.
+6. Готово — можно открывать **Inha App**.
+
+> **Ограничение бесплатного Apple ID:** подпись действует **7 дней**. Раз в неделю нужно снова подключить iPhone к ПК (или включить Wi-Fi refresh в Sideloadly) и переподписать приложение — **все данные и кэш внутри сохраняются**.
+
+#### Способ 2 — Без компьютера раз в неделю (SideStore / AltStore)
+Если у вас уже установлен **SideStore** или **AltStore**:
+1. Скачайте `.ipa` в Safari на iPhone.
+2. Откройте файл в **SideStore / AltStore** → нажмите **Install**.
+3. В SideStore переподпись раз в 7 дней происходит прямо на телефоне по Wi-Fi (без ПК).
+
+#### Способ 3 — Навсегда (TrollStore, для iOS 14.0 – 17.0)
+Если на устройстве установлен **TrollStore**:
+1. Скачайте `.ipa` в Safari.
+2. Нажмите **Поделиться → TrollStore** — приложение установится навсегда без ограничений на 7 дней.
+
+#### Особенности iOS-версии
+- **Работает полностью:** eClass (курсы, задания, сдача файлов, личные файлы, оценки, посещаемость, силлабус), INS Portal + GPA Calculator 4.5, расписание EduPage с автовыбором группы, локальные напоминания о парах и дедлайнах, тёмная/светлая тема, политика конфиденциальности и опциональные логи.
+- **Отличия от Android:**
+  - Нет нативных виджетов рабочего стола (пока только Android).
+  - Нет фоновой проверки новых заданий — задания обновляются при открытии приложения.
+  - Встроенная кнопка обновления открывает страницу нового релиза на GitHub для скачивания свежего `.ipa`.
 
 ### Сборка из исходников
 

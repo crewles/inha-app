@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -24,7 +25,7 @@ class UpdateCheckResult {
 /// Checks GitHub Releases for `crewles/inha-app` and bridges native Android
 /// platform actions (APK installer, home-screen widget updates/pinning).
 class UpdateService {
-  static const String currentVersion = '1.2.1';
+  static const String currentVersion = '1.2.2';
   static const String repoOwner = 'crewles';
   static const String repoName = 'inha-app';
   static const String latestReleaseApi =
@@ -97,18 +98,29 @@ class UpdateService {
       String? apkUrl;
       String? apkName;
       int apkSize = 0;
+      final isIos = !kIsWeb && Platform.isIOS;
       final assets = (data['assets'] as List?) ?? [];
       for (final asset in assets) {
         if (asset is! Map) continue;
         final aName = (asset['name'] ?? '').toString();
+        final lowerName = aName.toLowerCase();
         final dlUrl = (asset['browser_download_url'] ?? '').toString();
         final aSize = (asset['size'] as int?) ?? 0;
-        if (!aName.toLowerCase().endsWith('.apk') || dlUrl.isEmpty) continue;
-        if (apkUrl == null || aName.toLowerCase().contains('arm64')) {
+        if (dlUrl.isEmpty) continue;
+        if (isIos) {
+          if (!lowerName.endsWith('.ipa')) continue;
           apkUrl = dlUrl;
           apkName = aName;
           apkSize = aSize;
-          if (aName.toLowerCase().contains('arm64')) break;
+          break;
+        } else {
+          if (!lowerName.endsWith('.apk')) continue;
+          if (apkUrl == null || lowerName.contains('arm64')) {
+            apkUrl = dlUrl;
+            apkName = aName;
+            apkSize = aSize;
+            if (lowerName.contains('arm64')) break;
+          }
         }
       }
 

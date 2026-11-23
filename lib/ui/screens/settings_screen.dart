@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -113,6 +116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final gradeYear = (app.insData?.studentInfo['grade_year'] ?? '').trim();
     final displayName = studentName.isNotEmpty ? studentName : studentId;
     final hasCustomIns = (app.credentials?.insPassword ?? '').trim().isNotEmpty;
+    final isIos = !kIsWeb && Platform.isIOS;
 
     return Scaffold(
       appBar: ExpressiveAppBar(
@@ -309,46 +313,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     settings.copyWith(themeMode: mode),
                   ),
                 ),
-                _divider(cs),
-                Row(
-                  children: [
-                    SquircleIcon(
-                      size: 40,
-                      radius: 14,
-                      iconSize: 20,
-                      icon: Icons.wallpaper_rounded,
-                      backgroundColor: cs.primaryFixed,
-                      iconColor: cs.onPrimaryFixed,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            s.matchWallpaperTitle,
-                            style: tt.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            s.matchWallpaperSub,
-                            style: tt.bodySmall?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
+                if (!isIos) ...[
+                  _divider(cs),
+                  Row(
+                    children: [
+                      SquircleIcon(
+                        size: 40,
+                        radius: 14,
+                        iconSize: 20,
+                        icon: Icons.wallpaper_rounded,
+                        backgroundColor: cs.primaryFixed,
+                        iconColor: cs.onPrimaryFixed,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Switch(
-                      value: settings.dynamicColor,
-                      onChanged: (v) => app.updateSettings(
-                        settings.copyWith(dynamicColor: v),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              s.matchWallpaperTitle,
+                              style: tt.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              s.matchWallpaperSub,
+                              style: tt.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 8),
+                      Switch(
+                        value: settings.dynamicColor,
+                        onChanged: (v) => app.updateSettings(
+                          settings.copyWith(dynamicColor: v),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 _divider(cs),
                 Row(
                   children: [
@@ -440,66 +446,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ],
                 ),
-                _divider(cs),
-                Material(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    key: const ValueKey('open_widget_gallery_btn'),
+                if (!isIos) ...[
+                  _divider(cs),
+                  Material(
+                    color: Colors.transparent,
                     borderRadius: BorderRadius.circular(14),
-                    onTap: () {
-                      AppHaptics.light();
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const WidgetGalleryScreen(),
-                        ),
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 4, vertical: 6),
-                      child: Row(
-                        children: [
-                          SquircleIcon(
-                            size: 40,
-                            radius: 14,
-                            iconSize: 20,
-                            icon: Icons.widgets_outlined,
-                            backgroundColor: cs.primaryFixed,
-                            iconColor: cs.onPrimaryFixed,
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      key: const ValueKey('open_widget_gallery_btn'),
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () {
+                        AppHaptics.light();
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const WidgetGalleryScreen(),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  s.homeWidgetsTitle,
-                                  style: tt.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                Text(
-                                  s.homeWidgetsSub,
-                                  style: tt.bodySmall?.copyWith(
-                                    color: cs.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 6),
+                        child: Row(
+                          children: [
+                            SquircleIcon(
+                              size: 40,
+                              radius: 14,
+                              iconSize: 20,
+                              icon: Icons.widgets_outlined,
+                              backgroundColor: cs.primaryFixed,
+                              iconColor: cs.onPrimaryFixed,
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            size: 20,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ],
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    s.homeWidgetsTitle,
+                                    style: tt.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    s.homeWidgetsSub,
+                                    style: tt.bodySmall?.copyWith(
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              size: 20,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -622,68 +630,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 ],
-                _divider(cs),
-                Row(
-                  children: [
-                    SquircleIcon(
-                      size: 40,
-                      radius: 14,
-                      iconSize: 20,
-                      icon: Icons.sync_rounded,
-                      backgroundColor: cs.primaryFixed,
-                      iconColor: cs.onPrimaryFixed,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            s.autoCheckTasksTitle,
-                            style: tt.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            s.autoCheckTasksSub,
-                            style: tt.bodySmall?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
+                if (!isIos) ...[
+                  _divider(cs),
+                  Row(
+                    children: [
+                      SquircleIcon(
+                        size: 40,
+                        radius: 14,
+                        iconSize: 20,
+                        icon: Icons.sync_rounded,
+                        backgroundColor: cs.primaryFixed,
+                        iconColor: cs.onPrimaryFixed,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Switch(
-                      value: settings.bgSyncEnabled,
-                      onChanged: (v) => app.updateSettings(
-                        settings.copyWith(bgSyncEnabled: v),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              s.autoCheckTasksTitle,
+                              style: tt.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              s.autoCheckTasksSub,
+                              style: tt.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Switch(
+                        value: settings.bgSyncEnabled,
+                        onChanged: (v) => app.updateSettings(
+                          settings.copyWith(bgSyncEnabled: v),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (settings.bgSyncEnabled) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: ExpressiveSegmentedControl<int>(
+                        expand: false,
+                        itemPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 6),
+                        segments: [
+                          ExpressiveSegment(
+                              value: 1, label: s.isRu ? '1ч' : '1h'),
+                          ExpressiveSegment(
+                              value: 2, label: s.isRu ? '2ч' : '2h'),
+                          ExpressiveSegment(
+                              value: 4, label: s.isRu ? '4ч' : '4h'),
+                        ],
+                        selected: settings.bgSyncIntervalHours,
+                        onChanged: (h) => app.updateSettings(
+                          settings.copyWith(bgSyncIntervalHours: h),
+                        ),
                       ),
                     ),
                   ],
-                ),
-                if (settings.bgSyncEnabled) ...[
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: ExpressiveSegmentedControl<int>(
-                      expand: false,
-                      itemPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 6),
-                      segments: [
-                        ExpressiveSegment(
-                            value: 1, label: s.isRu ? '1ч' : '1h'),
-                        ExpressiveSegment(
-                            value: 2, label: s.isRu ? '2ч' : '2h'),
-                        ExpressiveSegment(
-                            value: 4, label: s.isRu ? '4ч' : '4h'),
-                      ],
-                      selected: settings.bgSyncIntervalHours,
-                      onChanged: (h) => app.updateSettings(
-                        settings.copyWith(bgSyncIntervalHours: h),
-                      ),
-                    ),
-                  ),
                 ],
                 _divider(cs),
                 Row(

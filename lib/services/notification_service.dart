@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
@@ -47,7 +50,13 @@ class NotificationService {
 
       const androidInit =
           AndroidInitializationSettings('@drawable/ic_stat_inha');
-      const initSettings = InitializationSettings(android: androidInit);
+      const darwinInit = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
+      const initSettings =
+          InitializationSettings(android: androidInit, iOS: darwinInit);
       await _plugin.initialize(
         initSettings,
         onDidReceiveNotificationResponse: (resp) =>
@@ -59,9 +68,19 @@ class NotificationService {
         _dispatchPayload(launchDetails?.notificationResponse?.payload);
       }
 
-      final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
-      await androidPlugin?.requestNotificationsPermission();
+      if (!kIsWeb && Platform.isIOS) {
+        final iosPlugin = _plugin.resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>();
+        await iosPlugin?.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+      } else {
+        final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+        await androidPlugin?.requestNotificationsPermission();
+      }
       _initialized = true;
     } catch (_) {}
   }
@@ -83,6 +102,12 @@ class NotificationService {
 
   Future<bool?> areNotificationsEnabled() async {
     if (!_initialized) await init();
+    if (!kIsWeb && Platform.isIOS) {
+      final iosPlugin = _plugin.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+      final perms = await iosPlugin?.checkPermissions();
+      return perms?.isEnabled;
+    }
     final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     return androidPlugin?.areNotificationsEnabled();
@@ -90,6 +115,15 @@ class NotificationService {
 
   Future<bool?> requestPermission() async {
     if (!_initialized) await init();
+    if (!kIsWeb && Platform.isIOS) {
+      final iosPlugin = _plugin.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+      return iosPlugin?.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    }
     final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     return androidPlugin?.requestNotificationsPermission();
@@ -160,6 +194,7 @@ class NotificationService {
         importance: Importance.high,
         priority: Priority.high,
       ),
+      iOS: DarwinNotificationDetails(),
     );
     await _plugin.zonedSchedule(
       9002,
@@ -198,7 +233,10 @@ class NotificationService {
       id,
       title,
       body,
-      NotificationDetails(android: androidDetails),
+      NotificationDetails(
+        android: androidDetails,
+        iOS: const DarwinNotificationDetails(),
+      ),
       payload: payload,
     );
   }
@@ -235,6 +273,7 @@ class NotificationService {
         importance: Importance.high,
         priority: Priority.high,
       ),
+      iOS: DarwinNotificationDetails(),
     );
 
     final (scheduleMode, _) = await _resolveScheduleMode();
@@ -315,6 +354,7 @@ class NotificationService {
         importance: Importance.high,
         priority: Priority.high,
       ),
+      iOS: DarwinNotificationDetails(),
     );
 
     final (scheduleMode, _) = await _resolveScheduleMode();
@@ -366,6 +406,7 @@ class NotificationService {
     required bool enabled,
     required int intervalHours,
   }) async {
+    if (kIsWeb || !Platform.isAndroid) return;
     try {
       if (enabled) {
         await _bgChannel.invokeMethod('schedule', {
