@@ -29,6 +29,7 @@ class UpdateService {
   static const String repoName = 'inha-app';
   static const String latestReleaseApi =
       'https://api.github.com/repos/$repoOwner/$repoName/releases/latest';
+  static const String repoWebUrl = 'https://github.com/$repoOwner/$repoName';
   static const String releasesWebUrl =
       'https://github.com/$repoOwner/$repoName/releases';
 
@@ -91,8 +92,7 @@ class UpdateService {
       final tag = (data['tag_name'] ?? '').toString().trim();
       final name = (data['name'] ?? tag).toString().trim();
       final body = (data['body'] ?? '').toString().trim();
-      final htmlUrl =
-          (data['html_url'] ?? releasesWebUrl).toString().trim();
+      final htmlUrl = (data['html_url'] ?? releasesWebUrl).toString().trim();
 
       String? apkUrl;
       String? apkName;

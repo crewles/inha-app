@@ -174,12 +174,8 @@ class Assignment {
     final sorted = List<Assignment>.from(items);
     sorted.sort((a, b) {
       if (pendingMode) {
-        final aGroup = a.dueTimestamp >= now
-            ? 0
-            : (a.dueTimestamp > 0 ? 1 : 2);
-        final bGroup = b.dueTimestamp >= now
-            ? 0
-            : (b.dueTimestamp > 0 ? 1 : 2);
+        final aGroup = a.dueTimestamp >= now ? 0 : (a.dueTimestamp > 0 ? 1 : 2);
+        final bGroup = b.dueTimestamp >= now ? 0 : (b.dueTimestamp > 0 ? 1 : 2);
         if (aGroup != bGroup) return aGroup.compareTo(bGroup);
         if (aGroup == 0) {
           final cmp = a.dueTimestamp.compareTo(b.dueTimestamp);
@@ -620,8 +616,10 @@ class AppSettings {
   final bool bgSyncEnabled;
   final int bgSyncIntervalHours;
   final String timetableGroup;
+  final bool timetableGroupAutoDetected;
   final int lastSyncAt;
   final bool hapticsEnabled;
+  final bool diagnosticsEnabled;
 
   const AppSettings({
     this.themeMode = 'system',
@@ -633,11 +631,13 @@ class AppSettings {
     this.notifyGrades = true,
     this.notifyTimetable = true,
     this.reminderOffsetMinutes = 15,
-    this.bgSyncEnabled = false,
+    this.bgSyncEnabled = true,
     this.bgSyncIntervalHours = 2,
     this.timetableGroup = '',
+    this.timetableGroupAutoDetected = false,
     this.lastSyncAt = 0,
     this.hapticsEnabled = true,
+    this.diagnosticsEnabled = false,
   });
 
   AppSettings copyWith({
@@ -653,8 +653,10 @@ class AppSettings {
     bool? bgSyncEnabled,
     int? bgSyncIntervalHours,
     String? timetableGroup,
+    bool? timetableGroupAutoDetected,
     int? lastSyncAt,
     bool? hapticsEnabled,
+    bool? diagnosticsEnabled,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -670,8 +672,11 @@ class AppSettings {
       bgSyncEnabled: bgSyncEnabled ?? this.bgSyncEnabled,
       bgSyncIntervalHours: bgSyncIntervalHours ?? this.bgSyncIntervalHours,
       timetableGroup: timetableGroup ?? this.timetableGroup,
+      timetableGroupAutoDetected:
+          timetableGroupAutoDetected ?? this.timetableGroupAutoDetected,
       lastSyncAt: lastSyncAt ?? this.lastSyncAt,
       hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
+      diagnosticsEnabled: diagnosticsEnabled ?? this.diagnosticsEnabled,
     );
   }
 }
@@ -736,4 +741,117 @@ class CourseScheduleInfo {
 
   String get classroomSummary => classrooms.join(', ');
   String get scheduleSummary => daySummaries.join(', ');
+}
+
+class LocalDraft {
+  final int? id;
+  final String assignmentId;
+  final int? assignId;
+  final String courseId;
+  final String courseName;
+  final String assignmentName;
+  final String due;
+  final int dueTimestamp;
+  final String? assignmentUrl;
+  final String filePath;
+  final String fileName;
+  final int fileSize;
+  final int updatedAt;
+
+  const LocalDraft({
+    this.id,
+    required this.assignmentId,
+    this.assignId,
+    required this.courseId,
+    required this.courseName,
+    required this.assignmentName,
+    this.due = '',
+    this.dueTimestamp = 0,
+    this.assignmentUrl,
+    required this.filePath,
+    required this.fileName,
+    required this.fileSize,
+    required this.updatedAt,
+  });
+
+  Map<String, Object?> toMap() => {
+        if (id != null) 'id': id,
+        'assignment_id': assignmentId,
+        'assign_id': assignId,
+        'course_id': courseId,
+        'course_name': courseName,
+        'assignment_name': assignmentName,
+        'due': due,
+        'due_timestamp': dueTimestamp,
+        'assignment_url': assignmentUrl,
+        'file_path': filePath,
+        'file_name': fileName,
+        'file_size': fileSize,
+        'updated_at': updatedAt,
+      };
+
+  factory LocalDraft.fromMap(Map<String, Object?> m) => LocalDraft(
+        id: m['id'] as int?,
+        assignmentId: (m['assignment_id'] as String?) ?? '',
+        assignId: m['assign_id'] as int?,
+        courseId: (m['course_id'] as String?) ?? '',
+        courseName: (m['course_name'] as String?) ?? '',
+        assignmentName: (m['assignment_name'] as String?) ?? '',
+        due: (m['due'] as String?) ?? '',
+        dueTimestamp: (m['due_timestamp'] as int?) ?? 0,
+        assignmentUrl: m['assignment_url'] as String?,
+        filePath: (m['file_path'] as String?) ?? '',
+        fileName: (m['file_name'] as String?) ?? '',
+        fileSize: (m['file_size'] as int?) ?? 0,
+        updatedAt: (m['updated_at'] as int?) ?? 0,
+      );
+}
+
+class EclassPrivateFile {
+  final String id;
+  final String filename;
+  final String filepath;
+  final int size;
+  final String sizeText;
+  final int modifiedAt;
+  final String modifiedText;
+  final String downloadUrl;
+  final String fileType;
+
+  const EclassPrivateFile({
+    required this.id,
+    required this.filename,
+    this.filepath = '/',
+    this.size = 0,
+    this.sizeText = '',
+    this.modifiedAt = 0,
+    this.modifiedText = '',
+    this.downloadUrl = '',
+    this.fileType = '',
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'filename': filename,
+        'filepath': filepath,
+        'size': size,
+        'size_text': sizeText,
+        'modified_at': modifiedAt,
+        'modified_text': modifiedText,
+        'download_url': downloadUrl,
+        'file_type': fileType,
+      };
+
+  factory EclassPrivateFile.fromMap(Map<String, Object?> m) =>
+      EclassPrivateFile(
+        id: (m['id'] as String?) ?? '',
+        filename: (m['filename'] as String?) ?? '',
+        filepath: (m['filepath'] as String?) ?? '/',
+        size: (m['size'] as int?) ?? 0,
+        sizeText: (m['size_text'] as String?) ?? '',
+        modifiedAt: (m['modified_at'] as int?) ?? 0,
+        modifiedText: (m['modified_text'] as String?) ?? '',
+        downloadUrl: (m['download_url'] as String?) ?? '',
+        fileType: (m['file_type'] as String?) ?? '',
+      );
 }

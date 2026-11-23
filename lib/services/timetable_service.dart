@@ -28,9 +28,21 @@ class TimetableService {
     ),
   );
 
-  /// Current time in Tashkent (UTC+5).
-  static DateTime nowTashkent() =>
-      DateTime.now().toUtc().add(const Duration(hours: 5));
+  /// Current time in Tashkent (UTC+5) as a wall-clock DateTime (non-UTC)
+  /// so comparisons with DateTime(y, m, d, h, min) share the same time scale.
+  static DateTime nowTashkent() {
+    final utcPlus5 = DateTime.now().toUtc().add(const Duration(hours: 5));
+    return DateTime(
+      utcPlus5.year,
+      utcPlus5.month,
+      utcPlus5.day,
+      utcPlus5.hour,
+      utcPlus5.minute,
+      utcPlus5.second,
+      utcPlus5.millisecond,
+      utcPlus5.microsecond,
+    );
+  }
 
   Future<(List<ScheduleEntry>, String, String)> fetchTimetable({
     int? year,
@@ -51,8 +63,7 @@ class TimetableService {
         '__gsh': _gsh,
       },
     );
-    final timetables =
-        (r.data!['r']['regular']['timetables'] as List<dynamic>);
+    final timetables = (r.data!['r']['regular']['timetables'] as List<dynamic>);
     final tt = timetables.first as Map<String, dynamic>;
     return (tt['tt_num'].toString(), (tt['text'] ?? '').toString());
   }
@@ -123,7 +134,8 @@ class TimetableService {
       if (seen.contains(dedupKey)) continue;
       seen.add(dedupKey);
 
-      final dur = int.tryParse(lesson['durationperiods']?.toString() ?? '1') ?? 1;
+      final dur =
+          int.tryParse(lesson['durationperiods']?.toString() ?? '1') ?? 1;
       String endTime = '?';
       final pNum = int.tryParse(periodId);
       if (pNum != null) {
@@ -135,15 +147,18 @@ class TimetableService {
       final subjectName = subjects[subjId]?['name']?.toString() ?? subjId;
 
       final teacherNames = ((lesson['teacherids'] as List?) ?? [])
-          .map((id) => teachers[id.toString()]?['name']?.toString() ?? id.toString())
+          .map((id) =>
+              teachers[id.toString()]?['name']?.toString() ?? id.toString())
           .toList();
 
       final classNames = ((lesson['classids'] as List?) ?? [])
-          .map((id) => classes[id.toString()]?['name']?.toString() ?? id.toString())
+          .map((id) =>
+              classes[id.toString()]?['name']?.toString() ?? id.toString())
           .toList();
 
       final classroomNames = ((card['classroomids'] as List?) ?? [])
-          .map((id) => classrooms[id.toString()]?['name']?.toString() ?? id.toString())
+          .map((id) =>
+              classrooms[id.toString()]?['name']?.toString() ?? id.toString())
           .toList();
 
       entries.add(ScheduleEntry(
@@ -161,8 +176,10 @@ class TimetableService {
     }
 
     entries.sort((a, b) {
-      final da = a.days.map((d) => dayOrder[d] ?? 9).reduce((x, y) => x < y ? x : y);
-      final db = b.days.map((d) => dayOrder[d] ?? 9).reduce((x, y) => x < y ? x : y);
+      final da =
+          a.days.map((d) => dayOrder[d] ?? 9).reduce((x, y) => x < y ? x : y);
+      final db =
+          b.days.map((d) => dayOrder[d] ?? 9).reduce((x, y) => x < y ? x : y);
       if (da != db) return da.compareTo(db);
       return a.periodStart.compareTo(b.periodStart);
     });
@@ -195,9 +212,11 @@ class TimetableService {
 
   /// Returns (entry, dayCode, minutesUntilStart or null if another day).
   static (ScheduleEntry, String, int?)? findNextLesson(
-      List<ScheduleEntry> groupEntries) {
+    List<ScheduleEntry> groupEntries, {
+    DateTime? nowOverride,
+  }) {
     if (groupEntries.isEmpty) return null;
-    final now = nowTashkent();
+    final now = nowOverride ?? nowTashkent();
     final wd = now.weekday; // 1 = Mon ... 7 = Sun
 
     if (wd <= 5) {
@@ -417,7 +436,8 @@ class TimetableService {
   }
 
   /// Reverse-matches an EduPage or INS [subjectName] to an enrolled eClass [Course].
-  static Course? matchSubjectToCourse(String subjectName, List<Course> courses) {
+  static Course? matchSubjectToCourse(
+      String subjectName, List<Course> courses) {
     if (subjectName.trim().isEmpty || courses.isEmpty) return null;
     final subjNorm = _normalizeSubject(subjectName);
     if (subjNorm.isEmpty) return null;
@@ -450,7 +470,8 @@ class TimetableService {
               : subjTokens.length;
           score = overlap / maxLen;
           if (score < 0.55 &&
-              (courseNorm.contains(subjNorm) || subjNorm.contains(courseNorm))) {
+              (courseNorm.contains(subjNorm) ||
+                  subjNorm.contains(courseNorm))) {
             final minTokens = courseTokens.length < subjTokens.length
                 ? courseTokens.length
                 : subjTokens.length;
@@ -470,6 +491,293 @@ class TimetableService {
       }
     }
     return best;
+  }
+
+  static final RegExp _cohortYearRx = RegExp(r'^[A-Z](\d{2})\d{4,}$');
+  static final RegExp _classYearSecRx = RegExp(r'(\d{2})-(\d+)$');
+
+  static String _normalizeGroupToken(String raw) {
+    var out = raw.toUpperCase().replaceAll(RegExp(r'\s+'), '');
+    out = out.replaceFirstMapped(
+      RegExp(r'-0+(\d+)$'),
+      (m) => '-${m.group(1)}',
+    );
+    return out;
+  }
+
+  static Map<int, int> _extractSectionVotes({
+    required List<String> hints,
+    required List<InsCourseGrade> insCourses,
+  }) {
+    final votes = <int, int>{};
+
+    void addVote(int? sec, [int weight = 1]) {
+      if (sec != null && sec >= 1 && sec <= 30) {
+        votes[sec] = (votes[sec] ?? 0) + weight;
+      }
+    }
+
+    for (final c in insCourses) {
+      final m = RegExp(r'^0*(\d{1,2})$').firstMatch(c.classNumber.trim());
+      if (m != null) {
+        addVote(int.tryParse(m.group(1)!), 2);
+      }
+    }
+
+    final patterns = [
+      RegExp(r'\b(?:section|sec|group|gr)\.?\s*#?\s*0*(\d{1,2})\b',
+          caseSensitive: false),
+      RegExp(r'\b[A-Z]{2,}\d{3,4}\s*[-_]\s*0*(\d{1,2})\b',
+          caseSensitive: false),
+      RegExp(r'\(\s*0*(\d{1,2})\s*\)'),
+      RegExp(r'\[\s*0*(\d{1,2})\s*\]'),
+    ];
+
+    for (final raw in hints) {
+      for (final rx in patterns) {
+        for (final m in rx.allMatches(raw)) {
+          addVote(int.tryParse(m.group(1)!));
+        }
+      }
+    }
+    return votes;
+  }
+
+  static double _scoreDepartmentMatch(String clsUpper, String deptSignals) {
+    if (deptSignals.trim().isEmpty) return 0.0;
+    final prefix = clsUpper.split(RegExp(r'\d')).first;
+
+    bool hasWord(String word) =>
+        RegExp('(?:^|[^a-z])$word(?:\\d|[^a-z]|\$)').hasMatch(deptSignals);
+
+    if (prefix == 'CSE' &&
+        (hasWord('cse') ||
+            deptSignals.contains('computer science') ||
+            deptSignals.contains('computer engineering'))) {
+      return 22.0;
+    }
+    if (prefix == 'ICE' &&
+        (hasWord('ice') ||
+            deptSignals.contains('information and communication'))) {
+      return 22.0;
+    }
+    if (prefix == 'CIE' && hasWord('cie')) {
+      return 22.0;
+    }
+    if (prefix == 'IT' && hasWord('it')) {
+      return 18.0;
+    }
+    if (prefix == 'CS' && hasWord('cs')) {
+      return 18.0;
+    }
+    if (prefix == 'AI' &&
+        (hasWord('ai') || deptSignals.contains('artificial intelligence'))) {
+      return 20.0;
+    }
+    if (prefix == 'DS' &&
+        (hasWord('ds') || deptSignals.contains('data science'))) {
+      return 20.0;
+    }
+    if (prefix == 'FND' &&
+        (hasWord('fnd') || deptSignals.contains('foundation'))) {
+      return 20.0;
+    }
+    if (prefix.startsWith('SBL(L)') && deptSignals.contains('logistics')) {
+      return 22.0;
+    }
+    if ((prefix.startsWith('SBL(B)') || prefix == 'BM') &&
+        (deptSignals.contains('business') || hasWord('sbl') || hasWord('bm'))) {
+      return 20.0;
+    }
+    if (deptSignals.contains('socie') &&
+        const {'CSE', 'ICE', 'CIE', 'IT', 'CS', 'AI', 'DS'}.contains(prefix)) {
+      return 12.0;
+    }
+    return 0.0;
+  }
+
+  static double _subjectSimilarity({
+    required String normA,
+    required Set<String> tokA,
+    required List<String> lvlA,
+    required String normB,
+  }) {
+    if (normA.isEmpty || normB.isEmpty) return 0.0;
+    final lvlB = _extractLevels(normB);
+    if (lvlA.isNotEmpty && lvlB.isNotEmpty && lvlA.join(',') != lvlB.join(',')) {
+      return 0.0;
+    }
+    if (normA == normB) return 1.0;
+    final tokB = _tokenizeSubject(normB);
+    if (tokA.isEmpty || tokB.isEmpty) return 0.0;
+    final overlap = tokA.where((t) => tokB.contains(t)).length;
+    final maxLen = tokA.length > tokB.length ? tokA.length : tokB.length;
+    var score = overlap / maxLen;
+    if (score < 0.55 && (normA.contains(normB) || normB.contains(normA))) {
+      final minLen = tokA.length < tokB.length ? tokA.length : tokB.length;
+      if (minLen >= 1 && overlap == minLen) {
+        score = 0.72;
+      }
+    }
+    return score >= 0.55 ? score : 0.0;
+  }
+
+  static Set<String> _nameTokens(String raw) {
+    return raw
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z]+'), ' ')
+        .split(' ')
+        .where((t) => t.length >= 3 && t != 'prof' && t != 'dr')
+        .toSet();
+  }
+
+  /// Infers the student's EduPage group (e.g. `CSE25-1`) from direct eClass
+  /// hints, student cohort year (`U25...`), INS department, enrolled courses,
+  /// course professors, and section numbers (`-001` / `(001)` / INS `001`).
+  static String? detectStudentGroup({
+    required List<ScheduleEntry> entries,
+    String? studentId,
+    String? insDepartment,
+    List<Course> courses = const [],
+    List<InsCourseGrade> insCourses = const [],
+    List<String> eclassHints = const [],
+  }) {
+    final allClasses = getClasses(entries);
+    if (allClasses.isEmpty) return null;
+
+    // 1. Direct exact group token match (e.g. Moodle group "CSE25-1" or "CSE 25-01").
+    final sortedByLen = [...allClasses]
+      ..sort((a, b) => b.length.compareTo(a.length));
+    final directPool = <String>[
+      ...eclassHints,
+      if (insDepartment != null && insDepartment.trim().isNotEmpty)
+        insDepartment,
+    ];
+    for (final rawHint in directPool) {
+      final normHint = rawHint
+          .toUpperCase()
+          .replaceAllMapped(
+              RegExp(r'([A-Z\)])\s+(\d{2}-)'), (m) => '${m.group(1)}${m.group(2)}')
+          .replaceAllMapped(RegExp(r'-0+(\d+\b)'), (m) => '-${m.group(1)}');
+      for (final cls in sortedByLen) {
+        final normCls = _normalizeGroupToken(cls);
+        final rx =
+            RegExp('(^|[^A-Z0-9])${RegExp.escape(normCls)}([^A-Z0-9]|\$)');
+        if (rx.hasMatch(normHint)) {
+          return cls;
+        }
+      }
+    }
+
+    // 2. Gather multi-signal evidence.
+    final sidMatch =
+        _cohortYearRx.firstMatch((studentId ?? '').trim().toUpperCase());
+    final studentYear = sidMatch?.group(1);
+
+    final sectionVotes = _extractSectionVotes(
+      hints: eclassHints,
+      insCourses: insCourses,
+    );
+    final totalVotes = sectionVotes.values.fold<int>(0, (a, b) => a + b);
+
+    final deptSignals = [
+      insDepartment ?? '',
+      ...eclassHints,
+      ...insCourses.map((c) => c.courseNumber),
+    ].join(' ').toLowerCase();
+
+    final activeCourses = courses.where((c) => c.isCurrent).toList();
+    final targetCourses = activeCourses.isNotEmpty ? activeCourses : courses;
+    final courseMeta = targetCourses.map((c) {
+      final norm = _normalizeSubject(c.name);
+      return (
+        norm: norm,
+        toks: _tokenizeSubject(norm),
+        lvls: _extractLevels(norm),
+        profTokens: _nameTokens(c.professor),
+      );
+    }).where((c) => c.norm.isNotEmpty).toList();
+
+    final entriesByClass = <String, List<ScheduleEntry>>{};
+    for (final e in entries) {
+      for (final c in e.classes) {
+        entriesByClass.putIfAbsent(c, () => []).add(e);
+      }
+    }
+
+    String? bestClass;
+    double bestScore = -1e9;
+    bool bestHasEvidence = false;
+
+    for (final cls in allClasses) {
+      final clsUpper = cls.toUpperCase();
+      final yrSecMatch = _classYearSecRx.firstMatch(clsUpper);
+      final clsYear = yrSecMatch?.group(1);
+      final clsSection =
+          yrSecMatch != null ? int.tryParse(yrSecMatch.group(2)!) : null;
+
+      double score = 0.0;
+      if (studentYear != null && clsYear != null) {
+        score += (clsYear == studentYear) ? 30.0 : -25.0;
+      }
+
+      final deptScore = _scoreDepartmentMatch(clsUpper, deptSignals);
+      score += deptScore;
+
+      int matchedCourses = 0;
+      final clsEntries = entriesByClass[cls] ?? const <ScheduleEntry>[];
+      for (final cm in courseMeta) {
+        bool subjectMatched = false;
+        bool profMatched = false;
+        for (final e in clsEntries) {
+          final eNorm = _normalizeSubject(e.subject);
+          final sim = _subjectSimilarity(
+            normA: cm.norm,
+            tokA: cm.toks,
+            lvlA: cm.lvls,
+            normB: eNorm,
+          );
+          if (sim <= 0) continue;
+          subjectMatched = true;
+          if (!profMatched && cm.profTokens.isNotEmpty) {
+            final teacherTokens = e.teachers.expand(_nameTokens).toSet();
+            if (cm.profTokens.any(teacherTokens.contains)) {
+              profMatched = true;
+            }
+          }
+        }
+        if (subjectMatched) {
+          matchedCourses++;
+          score += 12.0;
+          if (profMatched) score += 15.0;
+        }
+      }
+
+      bool matchedSection = false;
+      if (clsSection != null && totalVotes > 0) {
+        final v = sectionVotes[clsSection] ?? 0;
+        if (v > 0) {
+          matchedSection = true;
+          score += 8.0 * (v / totalVotes) + 0.5 * v;
+        }
+      }
+
+      final hasEvidence =
+          matchedCourses > 0 || deptScore > 0 || matchedSection;
+      if (score > bestScore ||
+          (score == bestScore &&
+              bestClass != null &&
+              cls.compareTo(bestClass) < 0)) {
+        bestScore = score;
+        bestClass = cls;
+        bestHasEvidence = hasEvidence;
+      }
+    }
+
+    if (bestClass != null && bestHasEvidence && bestScore >= 25.0) {
+      return bestClass;
+    }
+    return null;
   }
 
   /// Returns weekday index (`0 = Mon .. 4 = Fri`) of the course's first slot.

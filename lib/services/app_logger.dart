@@ -1,0 +1,236 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+
+enum LogLevel { info, warning, error, crash }
+
+class LogEntry {
+  final DateTime timestamp;
+  final LogLevel level;
+  final String tag;
+  final String message;
+  final String? details;
+
+  const LogEntry({
+    required this.timestamp,
+    required this.level,
+    required this.tag,
+    required this.message,
+    this.details,
+  });
+
+  String formatLine() {
+    final lvl = level.name.toUpperCase();
+    final base = '[${timestamp.toIso8601String()}] [$lvl] [$tag] $message';
+    if (details != null && details!.isNotEmpty) {
+      return '$base\n  $details';
+    }
+    return base;
+  }
+
+  Map<String, dynamic> toJson() => {
+        'ts': timestamp.toIso8601String(),
+        'level': level.name,
+        'tag': tag,
+        'message': message,
+        if (details != null) 'details': details,
+      };
+
+  factory LogEntry.fromJson(Map<String, dynamic> m) {
+    final lvlStr = (m['level'] ?? 'info').toString();
+    final level = LogLevel.values.firstWhere(
+      (e) => e.name == lvlStr,
+      orElse: () => LogLevel.info,
+    );
+    return LogEntry(
+      timestamp:
+          DateTime.tryParse((m['ts'] ?? '').toString()) ?? DateTime.now(),
+      level: level,
+      tag: (m['tag'] ?? 'APP').toString(),
+      message: (m['message'] ?? '').toString(),
+      details: m['details']?.toString(),
+    );
+  }
+}
+
+class AppLogger extends ChangeNotifier {
+  AppLogger._();
+  static final AppLogger instance = AppLogger._();
+
+  static const int _maxEntries = 300;
+  static const String _fileName = 'app_logs.json';
+
+  static final RegExp _secretKvRx = RegExp(
+    r'(password|eclass_password|ins_password|txtpw|wstoken|token|moodlesession|asp\.net_sessionid|cookie|authorization)(\s*[=:]\s*["\x27]?|\s+)([^\s&",}\]\x27]+)',
+    caseSensitive: false,
+  );
+  static final RegExp _hexTokenRx = RegExp(r'\b[a-fA-F0-9]{32}\b');
+  static final RegExp _studentIdRx = RegExp(r'\b[uU]\d{7}\b');
+
+  bool enabled = false;
+  bool hasPendingCrashPrompt = false;
+  LogEntry? lastCrashEntry;
+  final List<LogEntry> _entries = [];
+
+  @visibleForTesting
+  bool persistToDisk = true;
+
+  List<LogEntry> get entries => List.unmodifiable(_entries.reversed);
+
+  /// Scrubs passwords, tokens, session cookies, and student IDs before logging.
+  static String sanitize(String input) {
+    if (input.isEmpty) return input;
+    var out = input.replaceAllMapped(_secretKvRx, (m) {
+      return '${m.group(1)}${m.group(2)}***';
+    });
+    out = out.replaceAll(_hexTokenRx, '***');
+    out = out.replaceAll(_studentIdRx, 'U*******');
+    return out;
+  }
+
+  void info(String tag, String message) {
+    if (!enabled) return;
+    _append(
+      LogEntry(
+        timestamp: DateTime.now(),
+        level: LogLevel.info,
+        tag: sanitize(tag),
+        message: sanitize(message),
+      ),
+    );
+  }
+
+  void warn(String tag, String message) {
+    if (!enabled) return;
+    _append(
+      LogEntry(
+        timestamp: DateTime.now(),
+        level: LogLevel.warning,
+        tag: sanitize(tag),
+        message: sanitize(message),
+      ),
+    );
+  }
+
+  void error(String tag, String message, [Object? err]) {
+    if (!enabled) return;
+    _append(
+      LogEntry(
+        timestamp: DateTime.now(),
+        level: LogLevel.error,
+        tag: sanitize(tag),
+        message: sanitize(message),
+        details: err == null ? null : sanitize(err.toString()),
+      ),
+    );
+  }
+
+  Future<void> recordCrash(
+    Object error, [
+    StackTrace? stack,
+    String tag = 'CRASH',
+  ]) async {
+    final stackStr = stack?.toString().trim() ?? '';
+    final shortStack =
+        stackStr.length > 1500 ? '${stackStr.substring(0, 1500)}...' : stackStr;
+    final entry = LogEntry(
+      timestamp: DateTime.now(),
+      level: LogLevel.crash,
+      tag: sanitize(tag),
+      message: sanitize(error.toString()),
+      details: shortStack.isEmpty ? null : sanitize(shortStack),
+    );
+    lastCrashEntry = entry;
+    hasPendingCrashPrompt = true;
+    _addToMemory(entry);
+    notifyListeners();
+    await _persist();
+  }
+
+  Future<void> init({required bool enabled}) async {
+    this.enabled = enabled;
+    if (!persistToDisk) return;
+    try {
+      final file = await _logFile();
+      if (await file.exists()) {
+        final raw = await file.readAsString();
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) {
+          hasPendingCrashPrompt = decoded['pendingCrashPrompt'] == true;
+          final list = (decoded['entries'] as List?) ?? const [];
+          _entries.clear();
+          for (final item in list) {
+            if (item is Map) {
+              _entries.add(LogEntry.fromJson(Map<String, dynamic>.from(item)));
+            }
+          }
+          for (int i = _entries.length - 1; i >= 0; i--) {
+            if (_entries[i].level == LogLevel.crash) {
+              lastCrashEntry = _entries[i];
+              break;
+            }
+          }
+          notifyListeners();
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> dismissCrashPrompt() async {
+    hasPendingCrashPrompt = false;
+    notifyListeners();
+    await _persist();
+  }
+
+  Future<void> clear() async {
+    _entries.clear();
+    hasPendingCrashPrompt = false;
+    lastCrashEntry = null;
+    notifyListeners();
+    if (!persistToDisk) return;
+    try {
+      final file = await _logFile();
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {}
+  }
+
+  String exportText() {
+    if (_entries.isEmpty) return '';
+    return entries.map((e) => e.formatLine()).join('\n');
+  }
+
+  void _append(LogEntry entry) {
+    _addToMemory(entry);
+    notifyListeners();
+    _persist();
+  }
+
+  void _addToMemory(LogEntry entry) {
+    _entries.add(entry);
+    if (_entries.length > _maxEntries) {
+      _entries.removeRange(0, _entries.length - _maxEntries);
+    }
+  }
+
+  Future<File> _logFile() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File(p.join(dir.path, _fileName));
+  }
+
+  Future<void> _persist() async {
+    if (!persistToDisk) return;
+    try {
+      final file = await _logFile();
+      final payload = jsonEncode({
+        'pendingCrashPrompt': hasPendingCrashPrompt,
+        'entries': _entries.map((e) => e.toJson()).toList(),
+      });
+      await file.writeAsString(payload);
+    } catch (_) {}
+  }
+}

@@ -16,6 +16,27 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
   late tz.Location _tashkent;
+  void Function(String payload)? _onPayloadTap;
+  String? _pendingLaunchPayload;
+
+  void setOnPayloadTap(void Function(String payload) handler) {
+    _onPayloadTap = handler;
+    final pending = _pendingLaunchPayload;
+    if (pending != null && pending.isNotEmpty) {
+      _pendingLaunchPayload = null;
+      handler(pending);
+    }
+  }
+
+  void _dispatchPayload(String? payload) {
+    if (payload == null || payload.isEmpty) return;
+    final handler = _onPayloadTap;
+    if (handler != null) {
+      handler(payload);
+    } else {
+      _pendingLaunchPayload = payload;
+    }
+  }
 
   Future<void> init() async {
     if (_initialized) return;
@@ -24,9 +45,19 @@ class NotificationService {
       _tashkent = tz.getLocation('Asia/Tashkent');
       tz.setLocalLocation(_tashkent);
 
-      const androidInit = AndroidInitializationSettings('@drawable/ic_stat_inha');
+      const androidInit =
+          AndroidInitializationSettings('@drawable/ic_stat_inha');
       const initSettings = InitializationSettings(android: androidInit);
-      await _plugin.initialize(initSettings);
+      await _plugin.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: (resp) =>
+            _dispatchPayload(resp.payload),
+      );
+
+      final launchDetails = await _plugin.getNotificationAppLaunchDetails();
+      if (launchDetails?.didNotificationLaunchApp == true) {
+        _dispatchPayload(launchDetails?.notificationResponse?.payload);
+      }
 
       final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
@@ -39,11 +70,13 @@ class NotificationService {
     required int id,
     required String title,
     required String body,
+    String? payload,
   }) =>
       showNotification(
         id: id,
         title: title,
         body: body,
+        payload: payload,
         channelId: 'inha_grades',
         channelName: 'Grade Updates',
       );
@@ -108,6 +141,7 @@ class NotificationService {
       body: isRu
           ? 'Уведомления работают корректно!'
           : 'Notifications are working properly!',
+      payload: 'tab::4',
     );
   }
 
@@ -129,12 +163,15 @@ class NotificationService {
     );
     await _plugin.zonedSchedule(
       9002,
-      isRu ? 'Отложенный тест ($delaySecondsс)' : 'Delayed Test (${delaySeconds}s)',
+      isRu
+          ? 'Отложенный тест ($delaySecondsс)'
+          : 'Delayed Test (${delaySeconds}s)',
       isRu
           ? 'Запланированные будильники в фоне работают!'
           : 'Scheduled background reminders are working!',
       fireAt,
       details,
+      payload: 'tab::1',
       androidScheduleMode: mode,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
@@ -146,6 +183,7 @@ class NotificationService {
     required int id,
     required String title,
     required String body,
+    String? payload,
     String channelId = 'inha_updates',
     String channelName = 'Inha App Updates',
   }) async {
@@ -161,6 +199,7 @@ class NotificationService {
       title,
       body,
       NotificationDetails(android: androidDetails),
+      payload: payload,
     );
   }
 
@@ -236,6 +275,7 @@ class NotificationService {
             body,
             scheduled,
             details,
+            payload: 'timetable::$dayIdx',
             androidScheduleMode: scheduleMode,
             uiLocalNotificationDateInterpretation:
                 UILocalNotificationDateInterpretation.absoluteTime,
@@ -303,6 +343,7 @@ class NotificationService {
             body,
             fireAt,
             details,
+            payload: 'assignment::${a.id}',
             androidScheduleMode: scheduleMode,
             uiLocalNotificationDateInterpretation:
                 UILocalNotificationDateInterpretation.absoluteTime,

@@ -149,6 +149,7 @@ class EclassSyncWorker(
             .setContentTitle(title)
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(WidgetDbHelper.createOpenTabIntent(applicationContext, 1, 3001))
             .setAutoCancel(true)
             .build()
 

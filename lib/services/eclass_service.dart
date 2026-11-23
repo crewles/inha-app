@@ -51,6 +51,7 @@ class EclassService {
   String? _apiToken;
   int? _userId;
   bool _loggedIn = false;
+  final List<String> _currentCourseRawHints = [];
 
   EclassService() {
     _cookieJar = CookieJar();
@@ -82,6 +83,7 @@ class EclassService {
     _apiToken = null;
     _userId = null;
     _loggedIn = false;
+    _currentCourseRawHints.clear();
   }
 
   // ── Auth (Moodle API Token + Web Session) ───────────────────
@@ -91,6 +93,7 @@ class EclassService {
     _password = password;
     _loggedIn = false;
     _userId = null;
+    _currentCourseRawHints.clear();
     await _cookieJar.deleteAll();
 
     // 1. Try Moodle Mobile API token first (fastest & cleanest)
@@ -136,8 +139,7 @@ class EclassService {
           final name = input.attributes['name'] ?? '';
           if (name.isEmpty) continue;
           final type = (input.attributes['type'] ?? 'text').toLowerCase();
-          if (type == 'hidden' ||
-              (type == 'submit' && name == 'loginbutton')) {
+          if (type == 'hidden' || (type == 'submit' && name == 'loginbutton')) {
             payload[name] = input.attributes['value'] ?? '';
           }
         }
@@ -286,6 +288,514 @@ class EclassService {
     return null;
   }
 
+  static bool isCustomAvatarUrl(String? url) {
+    if (url == null) return false;
+    final clean = url.trim();
+    if (clean.isEmpty) return false;
+    if (clean.contains('/theme/image.php/')) return false;
+    final pathOnly = clean.split('?').first;
+    if (pathOnly.endsWith('/u/f1') ||
+        pathOnly.endsWith('/u/f2') ||
+        pathOnly.endsWith('/u/f3')) {
+      return false;
+    }
+    return clean.startsWith('http://') || clean.startsWith('https://');
+  }
+
+  static bool _hasValidImageMagicBytes(List<int> bytes) {
+    if (bytes.length < 12) return false;
+    final isJpeg = bytes[0] == 0xFF && bytes[1] == 0xD8;
+    final isPng = bytes[0] == 0x89 && bytes[1] == 0x50;
+    final isGif = bytes[0] == 0x47 && bytes[1] == 0x49;
+    final isWebp = bytes[0] == 0x52 && bytes[1] == 0x49;
+    return isJpeg || isPng || isGif || isWebp;
+  }
+
+  Future<String?> fetchProfilePhotoUrl() async {
+    try {
+      final info = await callWebService('core_webservice_get_site_info', {});
+      if (info is Map) {
+        if (info['userid'] != null) {
+          _userId = int.tryParse(info['userid'].toString());
+        }
+        final pic = info['userpictureurl']?.toString() ?? '';
+        if (isCustomAvatarUrl(pic)) return pic;
+      }
+    } catch (_) {}
+
+    try {
+      if (await ensureWebLoggedIn()) {
+        final resp = await _getAuthedHtml(baseUrl);
+        final doc = html_parser.parse(resp.data ?? '');
+        final src = doc.querySelector('img.userpicture')?.attributes['src'];
+        if (isCustomAvatarUrl(src)) return src;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<String?> downloadProfilePhoto(String savePath) async {
+    final url = await fetchProfilePhotoUrl();
+    if (url == null) return null;
+
+    final candidates = <String>[];
+    final token = _apiToken;
+    if (token != null &&
+        token.isNotEmpty &&
+        url.contains('/pluginfile.php/') &&
+        !url.contains('/webservice/pluginfile.php/')) {
+      final wsUrl =
+          url.replaceFirst('/pluginfile.php/', '/webservice/pluginfile.php/');
+      final sep = wsUrl.contains('?') ? '&' : '?';
+      candidates.add('$wsUrl${sep}token=$token');
+    }
+    candidates.add(url);
+
+    for (final dlUrl in candidates) {
+      try {
+        if (!dlUrl.contains('token=')) {
+          await ensureWebLoggedIn();
+        }
+        final resp = await _dio.get<List<int>>(
+          dlUrl,
+          options: Options(responseType: ResponseType.bytes),
+        );
+        final bytes = resp.data;
+        if (resp.statusCode == 200 &&
+            bytes != null &&
+            bytes.length > 200 &&
+            _hasValidImageMagicBytes(bytes)) {
+          final file = File(savePath);
+          await file.parent.create(recursive: true);
+          await file.writeAsBytes(bytes, flush: true);
+          return savePath;
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  // ── eClass Private Files (/user/files.php & user/private) ──
+
+  static String _normalizePrivatePath(String raw) {
+    var s = raw.trim();
+    if (s.isEmpty || s == '/') return '/';
+    if (!s.startsWith('/')) s = '/$s';
+    if (!s.endsWith('/')) s = '$s/';
+    return s;
+  }
+
+  static int _parseHumanFileSize(String raw) {
+    final m = RegExp(
+      r'([0-9]+(?:[.,][0-9]+)?)\s*(bytes?|b|kb|kib|mb|mib|gb|gib)?',
+      caseSensitive: false,
+    ).firstMatch(raw.trim());
+    if (m == null) return 0;
+    final numVal = double.tryParse(m.group(1)!.replaceAll(',', '.')) ?? 0;
+    if (numVal <= 0) return 0;
+    final unit = (m.group(2) ?? '').toLowerCase();
+    if (unit.startsWith('g')) return (numVal * 1024 * 1024 * 1024).round();
+    if (unit.startsWith('m')) return (numVal * 1024 * 1024).round();
+    if (unit.startsWith('k')) return (numVal * 1024).round();
+    return numVal.round();
+  }
+
+  static ({List<EclassPrivateFile> files, Set<String> folderPaths})
+      _parseFilemanagerListDetailed(
+    List<dynamic> rawList, {
+    String defaultPath = '/',
+  }) {
+    final files = <EclassPrivateFile>[];
+    final folderPaths = <String>{};
+    final normalizedDefault = _normalizePrivatePath(defaultPath);
+
+    for (final item in rawList) {
+      if (item is! Map) continue;
+      final typeStr = (item['type'] ?? '').toString().trim().toLowerCase();
+      final isDir = item['isdir'] == true || typeStr == 'folder';
+      final rawFilename =
+          (item['filename'] ?? item['fullname'] ?? '').toString().trim();
+
+      if (isDir || rawFilename == '.') {
+        var folderPath =
+            (item['path'] ?? item['filepath'] ?? '').toString().trim();
+        if (folderPath.isEmpty ||
+            _normalizePrivatePath(folderPath) == normalizedDefault) {
+          final folderName =
+              (item['fullname'] ?? rawFilename).toString().trim();
+          if (folderName.isNotEmpty && folderName != '.') {
+            folderPath = '$normalizedDefault$folderName/';
+          }
+        }
+        final normFolder = _normalizePrivatePath(folderPath);
+        if (normFolder != '/') {
+          folderPaths.add(normFolder);
+        }
+        final children = item['children'];
+        if (children is List && children.isNotEmpty) {
+          final sub = _parseFilemanagerListDetailed(
+            children,
+            defaultPath: normFolder,
+          );
+          files.addAll(sub.files);
+          folderPaths.addAll(sub.folderPaths);
+        }
+        continue;
+      }
+
+      if (rawFilename.isEmpty) continue;
+      final filepath = _normalizePrivatePath(
+        (item['filepath'] ?? normalizedDefault).toString(),
+      );
+      final sizeText = (item['filesize'] ?? '').toString().trim();
+      final rawNumSize =
+          int.tryParse((item['rawsize'] ?? item['size'] ?? '').toString());
+      final size = (rawNumSize != null && rawNumSize > 0)
+          ? rawNumSize
+          : _parseHumanFileSize(sizeText);
+      final modifiedAt = int.tryParse(
+            (item['timemodified'] ?? item['datemodified'] ?? '0').toString(),
+          ) ??
+          0;
+      var modifiedText = (item['datemodified_f'] ??
+              item['date'] ??
+              item['datemodifiedFormatted'] ??
+              '')
+          .toString()
+          .trim();
+      if (modifiedText.isEmpty && modifiedAt > 0) {
+        modifiedText = _formatUnixDate(modifiedAt);
+      }
+      var downloadUrl =
+          (item['url'] ?? item['fileurl'] ?? '').toString().trim();
+      if (downloadUrl.isNotEmpty && !downloadUrl.startsWith('http')) {
+        downloadUrl = Uri.parse(baseUrl).resolve(downloadUrl).toString();
+      }
+      final fileType =
+          (item['mimetype'] ?? item['type'] ?? '').toString().trim();
+
+      files.add(EclassPrivateFile(
+        id: '$filepath$rawFilename',
+        filename: rawFilename,
+        filepath: filepath,
+        size: size,
+        sizeText: sizeText,
+        modifiedAt: modifiedAt,
+        modifiedText: modifiedText,
+        downloadUrl: downloadUrl,
+        fileType: fileType,
+      ));
+    }
+
+    return (files: files, folderPaths: folderPaths);
+  }
+
+  @visibleForTesting
+  static List<EclassPrivateFile> parseFilemanagerList(
+    List<dynamic> rawList, {
+    String defaultPath = '/',
+  }) =>
+      _parseFilemanagerListDetailed(rawList, defaultPath: defaultPath).files;
+
+  static ({
+    List<EclassPrivateFile> files,
+    Set<String> folderPaths,
+    String? itemId,
+    String? clientId,
+    String? sesskey,
+  }) _parsePrivateFilesHtmlDetailed(String html) {
+    final files = <EclassPrivateFile>[];
+    final folderPaths = <String>{};
+    String? itemId;
+    String? clientId;
+
+    var searchFrom = 0;
+    const marker = 'M.form_filemanager.init(';
+    while (true) {
+      final idx = html.indexOf(marker, searchFrom);
+      if (idx < 0) break;
+      final braceIdx = html.indexOf('{', idx + marker.length);
+      if (braceIdx < 0) break;
+      final jsonStr = _extractBalancedJsonObject(html, braceIdx);
+      searchFrom = idx + marker.length;
+      if (jsonStr == null) continue;
+      try {
+        final cfg = jsonDecode(jsonStr);
+        if (cfg is! Map) continue;
+        itemId ??= cfg['itemid']?.toString();
+        clientId ??= cfg['client_id']?.toString();
+        final list = cfg['list'];
+        if (list is List) {
+          final parsed = _parseFilemanagerListDetailed(
+            list,
+            defaultPath: (cfg['filepath'] ?? '/').toString(),
+          );
+          files.addAll(parsed.files);
+          folderPaths.addAll(parsed.folderPaths);
+        }
+      } catch (_) {}
+    }
+
+    String? sesskey =
+        RegExp(r'"sesskey"\s*:\s*"([^"]+)"').firstMatch(html)?.group(1);
+    dom.Document? cachedDoc;
+    if (sesskey == null || sesskey.isEmpty) {
+      cachedDoc = html_parser.parse(html);
+      sesskey = cachedDoc
+          .querySelector('input[name="sesskey"]')
+          ?.attributes['value']
+          ?.trim();
+    }
+
+    if (files.isEmpty) {
+      cachedDoc ??= html_parser.parse(html);
+      final seenUrls = <String>{};
+      for (final a in cachedDoc.querySelectorAll(
+        'a[href*="draftfile.php"], a[href*="pluginfile.php"]',
+      )) {
+        final href = (a.attributes['href'] ?? '').trim();
+        if (href.isEmpty) continue;
+        final resolved = Uri.parse(baseUrl).resolve(href).toString();
+        if (!seenUrls.add(resolved)) continue;
+        var name = a.text.replaceAll('\u00A0', ' ').trim();
+        if (name.isEmpty) {
+          name = Uri.tryParse(resolved)?.pathSegments.last ?? '';
+        }
+        if (name.isEmpty) continue;
+        files.add(EclassPrivateFile(
+          id: '/$name',
+          filename: name,
+          filepath: '/',
+          downloadUrl: resolved,
+        ));
+      }
+    }
+
+    return (
+      files: files,
+      folderPaths: folderPaths,
+      itemId: itemId,
+      clientId: clientId,
+      sesskey: sesskey,
+    );
+  }
+
+  @visibleForTesting
+  static List<EclassPrivateFile> parsePrivateFilesHtml(String html) =>
+      _parsePrivateFilesHtmlDetailed(html).files;
+
+  Future<List<EclassPrivateFile>> getPrivateFiles() async {
+    final byId = <String, EclassPrivateFile>{};
+    var anySourceSucceeded = false;
+
+    void mergeAll(Iterable<EclassPrivateFile> items, {bool preferNew = false}) {
+      for (final f in items) {
+        final existing = byId[f.id];
+        if (existing == null) {
+          byId[f.id] = f;
+        } else if (preferNew) {
+          byId[f.id] = EclassPrivateFile(
+            id: f.id,
+            filename: f.filename,
+            filepath: f.filepath,
+            size: f.size > 0 ? f.size : existing.size,
+            sizeText:
+                f.sizeText.isNotEmpty ? f.sizeText : existing.sizeText,
+            modifiedAt:
+                f.modifiedAt > 0 ? f.modifiedAt : existing.modifiedAt,
+            modifiedText: f.modifiedText.isNotEmpty
+                ? f.modifiedText
+                : existing.modifiedText,
+            downloadUrl:
+                f.downloadUrl.isNotEmpty ? f.downloadUrl : existing.downloadUrl,
+            fileType: f.fileType.isNotEmpty ? f.fileType : existing.fileType,
+          );
+        }
+      }
+    }
+
+    // 1. Fetch eClass web Private Files page (/user/files.php) + subfolders
+    try {
+      final resp = await _getAuthedHtml('$baseUrl/user/files.php');
+      final html = resp.data ?? '';
+      if (!_isLoginPage(resp.finalUri, html)) {
+        anySourceSucceeded = true;
+        final parsed = _parsePrivateFilesHtmlDetailed(html);
+        mergeAll(parsed.files);
+
+        final sesskey = parsed.sesskey;
+        final clientId = parsed.clientId;
+        final itemId = parsed.itemId;
+        if (sesskey != null &&
+            sesskey.isNotEmpty &&
+            clientId != null &&
+            clientId.isNotEmpty &&
+            itemId != null &&
+            itemId.isNotEmpty &&
+            parsed.folderPaths.isNotEmpty) {
+          final queue = List<String>.from(parsed.folderPaths);
+          final visited = <String>{'/'};
+          while (queue.isNotEmpty && visited.length < 24) {
+            final folderPath = queue.removeAt(0);
+            if (!visited.add(folderPath)) continue;
+            try {
+              final ajaxResp = await _dio.post<dynamic>(
+                '$baseUrl/repository/draftfiles_ajax.php?action=list',
+                data: {
+                  'sesskey': sesskey,
+                  'client_id': clientId,
+                  'itemid': itemId,
+                  'filepath': folderPath,
+                },
+                options: Options(
+                  contentType: Headers.formUrlEncodedContentType,
+                  responseType: ResponseType.plain,
+                ),
+              );
+              final rawText = (ajaxResp.data?.toString() ?? '').trim();
+              if (rawText.isEmpty) continue;
+              final decoded = jsonDecode(rawText);
+              if (decoded is Map && decoded['list'] is List) {
+                final sub = _parseFilemanagerListDetailed(
+                  decoded['list'] as List,
+                  defaultPath: folderPath,
+                );
+                mergeAll(sub.files);
+                for (final p in sub.folderPaths) {
+                  if (!visited.contains(p)) queue.add(p);
+                }
+              }
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 2. Supplement/upgrade URLs with Moodle WS core_files_get_files (user/private)
+    if (_apiToken != null || (_username != null && _password != null)) {
+      try {
+        final uid = await _getUserId();
+        final queue = <String>['/'];
+        final visited = <String>{};
+        while (queue.isNotEmpty && visited.length < 24) {
+          final path = queue.removeAt(0);
+          if (!visited.add(path)) continue;
+          final params = <String, dynamic>{
+            'contextid': -1,
+            'component': 'user',
+            'filearea': 'private',
+            'itemid': 0,
+            'filepath': path,
+            'filename': '',
+            if (uid != null) 'contextlevel': 'user',
+            if (uid != null) 'instanceid': uid,
+          };
+          final res = await callWebService('core_files_get_files', params);
+          if (res is! Map) break;
+          anySourceSucceeded = true;
+          final rawFiles = (res['files'] as List?) ?? const [];
+          for (final item in rawFiles) {
+            if (item is! Map) continue;
+            final isDir = item['isdir'] == true;
+            final name = (item['filename'] ?? '').toString().trim();
+            final fpath = _normalizePrivatePath(
+              (item['filepath'] ?? path).toString(),
+            );
+            if (isDir) {
+              if (fpath != '/' && !visited.contains(fpath)) {
+                queue.add(fpath);
+              } else if (name.isNotEmpty && name != '.') {
+                final candidate = '$fpath$name/';
+                if (!visited.contains(candidate)) queue.add(candidate);
+              }
+              continue;
+            }
+            if (name.isEmpty || name == '.') continue;
+            final size = int.tryParse((item['filesize'] ?? '0').toString()) ?? 0;
+            final modified =
+                int.tryParse((item['timemodified'] ?? '0').toString()) ?? 0;
+            final url = (item['url'] ?? '').toString().trim();
+            final mime = (item['mimetype'] ?? '').toString().trim();
+            mergeAll([
+              EclassPrivateFile(
+                id: '$fpath$name',
+                filename: name,
+                filepath: fpath,
+                size: size,
+                modifiedAt: modified,
+                modifiedText: modified > 0 ? _formatUnixDate(modified) : '',
+                downloadUrl: url,
+                fileType: mime,
+              ),
+            ], preferNew: true);
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!anySourceSucceeded) {
+      throw EclassException('Could not reach eClass Private Files');
+    }
+
+    final out = byId.values.toList();
+    out.sort((a, b) {
+      final cmp = b.modifiedAt.compareTo(a.modifiedAt);
+      if (cmp != 0) return cmp;
+      return a.filename.toLowerCase().compareTo(b.filename.toLowerCase());
+    });
+    return out;
+  }
+
+  Future<String> downloadPrivateFile(
+    EclassPrivateFile file, {
+    void Function(int received, int total)? onProgress,
+  }) async {
+    Future<bool> looksLikeHtmlError(String path) async {
+      final lower = file.filename.toLowerCase();
+      if (lower.endsWith('.html') || lower.endsWith('.htm')) return false;
+      try {
+        final bytes = await File(path).openRead(0, 128).fold<List<int>>(
+          <int>[],
+          (prev, chunk) => prev..addAll(chunk),
+        );
+        final head = String.fromCharCodes(bytes).trimLeft().toLowerCase();
+        return head.startsWith('<!doctype html') ||
+            head.startsWith('<html');
+      } catch (_) {
+        return false;
+      }
+    }
+
+    if (file.downloadUrl.isNotEmpty) {
+      try {
+        final saved = await downloadFile(
+          file.downloadUrl,
+          file.filename,
+          onProgress: onProgress,
+        );
+        if (!await looksLikeHtmlError(saved)) {
+          return saved;
+        }
+      } catch (_) {}
+    }
+
+    final refreshed = await getPrivateFiles();
+    final match = refreshed.cast<EclassPrivateFile?>().firstWhere(
+          (f) =>
+              f?.id == file.id ||
+              f?.filename.toLowerCase() == file.filename.toLowerCase(),
+          orElse: () => null,
+        );
+    if (match == null || match.downloadUrl.isEmpty) {
+      throw EclassException('Private file URL unavailable for ${file.filename}');
+    }
+    return downloadFile(
+      match.downloadUrl,
+      match.filename,
+      onProgress: onProgress,
+    );
+  }
+
   // ── Courses (JSON API + current semester detection) ─────────
 
   String _unescapeText(String raw) {
@@ -305,7 +815,8 @@ class EclassService {
             .replaceAll(RegExp(r'\s+'), ' ')
             .trim();
         raw = raw.replaceFirst(
-          RegExp(r'^(Professor|Prof\.|Lecturer|교수)\s*:\s*', caseSensitive: false),
+          RegExp(r'^(Professor|Prof\.|Lecturer|교수)\s*:\s*',
+              caseSensitive: false),
           '',
         );
         return raw.trim();
@@ -374,16 +885,23 @@ class EclassService {
           }
 
           final courses = <Course>[];
+          final apiHints = <String>[];
           for (final c in rawCourses) {
             final cid = c['id'].toString();
-            final rawName =
-                _unescapeText((c['fullname'] ?? c['shortname'] ?? '').toString());
-            final cleanName =
-                rawName.replaceAll(RegExp(r'\[.*?\]'), '').trim();
+            final rawName = _unescapeText(
+                (c['fullname'] ?? c['shortname'] ?? '').toString());
+            final shortName = _unescapeText((c['shortname'] ?? '').toString());
+            final idNumber = _unescapeText((c['idnumber'] ?? '').toString());
+            final cleanName = rawName.replaceAll(RegExp(r'\[.*?\]'), '').trim();
             final cat = (c['category'] as int?) ?? 0;
             final isCur = activeIds.isNotEmpty
                 ? activeIds.contains(cid)
                 : (maxCat == 0 || cat == maxCat);
+            if (isCur) {
+              if (rawName.isNotEmpty) apiHints.add(rawName);
+              if (shortName.isNotEmpty) apiHints.add(shortName);
+              if (idNumber.isNotEmpty) apiHints.add(idNumber);
+            }
             if (cleanName.isNotEmpty) {
               courses.add(Course(
                 id: cid,
@@ -396,7 +914,12 @@ class EclassService {
               ));
             }
           }
-          if (courses.isNotEmpty) return courses;
+          if (courses.isNotEmpty) {
+            _currentCourseRawHints
+              ..clear()
+              ..addAll(apiHints);
+            return courses;
+          }
         }
       }
     } catch (_) {}
@@ -410,6 +933,7 @@ class EclassService {
     }
     final seen = <String>{};
     final courses = <Course>[];
+    final htmlHints = <String>[];
     for (final a in links) {
       final href = a.attributes['href'] ?? '';
       if (!href.contains('id=')) continue;
@@ -419,6 +943,7 @@ class EclassService {
       final rawName = _unescapeText((h3 ?? a).text);
       final name = rawName.replaceAll(RegExp(r'\[.*?\]'), '').trim();
       if (name.isEmpty) continue;
+      if (rawName.isNotEmpty) htmlHints.add(rawName);
       seen.add(courseId);
       courses.add(Course(
         id: courseId,
@@ -427,7 +952,69 @@ class EclassService {
         updatedAt: now,
       ));
     }
+    if (courses.isNotEmpty) {
+      _currentCourseRawHints
+        ..clear()
+        ..addAll(htmlHints);
+    }
     return courses;
+  }
+
+  /// Collects raw course names/codes, Moodle course groups, and user profile
+  /// fields to help infer the student's EduPage section (e.g. `CSE25-1`).
+  Future<List<String>> fetchStudentGroupHints() async {
+    final hints = <String>{
+      for (final h in _currentCourseRawHints)
+        if (h.trim().isNotEmpty) h.trim(),
+    };
+
+    try {
+      final uid = await _getUserId();
+      if (uid != null) {
+        try {
+          final grpRes = await callWebService(
+            'core_group_get_course_user_groups',
+            {'userid': uid},
+          );
+          if (grpRes is Map && grpRes['groups'] is List) {
+            for (final g in grpRes['groups'] as List) {
+              if (g is! Map) continue;
+              final name = _unescapeText((g['name'] ?? '').toString());
+              final desc = _htmlToPlainText((g['description'] ?? '').toString());
+              if (name.isNotEmpty) hints.add(name);
+              if (desc.isNotEmpty) hints.add(desc);
+            }
+          }
+        } catch (_) {}
+
+        try {
+          final userRes = await callWebService(
+            'core_user_get_users_by_field',
+            {'field': 'id', 'values[0]': uid},
+          );
+          if (userRes is List) {
+            for (final u in userRes) {
+              if (u is! Map) continue;
+              for (final key in const ['department', 'institution']) {
+                final v = _unescapeText((u[key] ?? '').toString());
+                if (v.isNotEmpty) hints.add(v);
+              }
+              final desc = _htmlToPlainText((u['description'] ?? '').toString());
+              if (desc.isNotEmpty) hints.add(desc);
+              if (u['customfields'] is List) {
+                for (final cf in u['customfields'] as List) {
+                  if (cf is! Map) continue;
+                  final v = _htmlToPlainText((cf['value'] ?? '').toString());
+                  if (v.isNotEmpty) hints.add(v);
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    return hints.toList();
   }
 
   // ── Assignments (Fast JSON API + Status + HTML fallback) ────
@@ -669,10 +1256,11 @@ class EclassService {
     return results;
   }
 
-  String _formatUnixDate(int unixSeconds) {
+  static String _formatUnixDate(int unixSeconds) {
     // Format in Tashkent (UTC+5)
-    final dt = DateTime.fromMillisecondsSinceEpoch(unixSeconds * 1000, isUtc: true)
-        .add(const Duration(hours: 5));
+    final dt =
+        DateTime.fromMillisecondsSinceEpoch(unixSeconds * 1000, isUtc: true)
+            .add(const Duration(hours: 5));
     final d = dt.day.toString().padLeft(2, '0');
     final mo = dt.month.toString().padLeft(2, '0');
     final h = dt.hour.toString().padLeft(2, '0');
@@ -759,8 +1347,8 @@ class EclassService {
 
             final itemClasses = itemCell.classes;
             final rowClasses = row.classes;
-            final isLevel1 = itemClasses.contains('level1') ||
-                rowClasses.contains('level1');
+            final isLevel1 =
+                itemClasses.contains('level1') || rowClasses.contains('level1');
             final lowerName = name.toLowerCase();
             final isExplicitCourseTotal =
                 lowerName.startsWith('course total') ||
@@ -814,8 +1402,11 @@ class EclassService {
               final derivedCat = currentCategory.isNotEmpty
                   ? currentCategory
                   : name
-                      .replaceAll(RegExp(r'\s*\bSUM$', caseSensitive: false), '')
-                      .replaceAll(RegExp(r'\s*Category total$', caseSensitive: false), '')
+                      .replaceAll(
+                          RegExp(r'\s*\bSUM$', caseSensitive: false), '')
+                      .replaceAll(
+                          RegExp(r'\s*Category total$', caseSensitive: false),
+                          '')
                       .trim();
               grades.add(GradeItem(
                 courseId: courseId,
@@ -866,10 +1457,8 @@ class EclassService {
                         (rawType == 'course' ? 'Course total' : 'Category'))
                     .toString()
                     .trim();
-                final val =
-                    (raw['gradeformatted'] ?? '-').toString().trim();
-                final weight =
-                    (raw['weightformatted'] ?? '').toString().trim();
+                final val = (raw['gradeformatted'] ?? '-').toString().trim();
+                final weight = (raw['weightformatted'] ?? '').toString().trim();
                 final pct =
                     (raw['percentageformatted'] ?? '').toString().trim();
                 final minG = raw['grademin']?.toString() ?? '0';
@@ -991,8 +1580,8 @@ class EclassService {
 
   int _extractInt(String text, List<String> keys) {
     for (final key in keys) {
-      final m = RegExp('$key\\s*:\\s*(\\d+)', caseSensitive: false)
-          .firstMatch(text);
+      final m =
+          RegExp('$key\\s*:\\s*(\\d+)', caseSensitive: false).firstMatch(text);
       if (m != null) {
         return int.tryParse(m.group(1)!) ?? 0;
       }
@@ -1058,7 +1647,8 @@ class EclassService {
         }
       } catch (_) {}
     } catch (_) {
-      final resp = await _getAuthedHtml('$baseUrl/course/view.php?id=$courseId');
+      final resp =
+          await _getAuthedHtml('$baseUrl/course/view.php?id=$courseId');
       final doc = html_parser.parse(resp.data ?? '');
       for (final a in doc.querySelectorAll('a[href]')) {
         final href = a.attributes['href'] ?? '';
@@ -1589,7 +2179,8 @@ class EclassService {
     String filename, {
     bool submitForGrading = false,
   }) async {
-    final editUrl = '$baseUrl/mod/assign/view.php?id=$cmid&action=editsubmission';
+    final editUrl =
+        '$baseUrl/mod/assign/view.php?id=$cmid&action=editsubmission';
     final editResp = await _getAuthedHtml(editUrl);
     final html = editResp.data ?? '';
     if (_isLoginPage(editResp.finalUri, html)) {
@@ -1644,7 +2235,8 @@ class EclassService {
         payload[name] = inp.attributes['value'] ?? '';
       }
     }
-    final textarea = form.querySelector('textarea[name="onlinetext_editor[text]"]');
+    final textarea =
+        form.querySelector('textarea[name="onlinetext_editor[text]"]');
     if (textarea != null) {
       payload['onlinetext_editor[text]'] = textarea.text;
     }
@@ -1889,10 +2481,8 @@ class EclassService {
 
   static String? _cleanCustomWeightLabel(String raw) {
     if (_isTotalOrMetaHeader(raw)) return null;
-    var cleaned = raw
-        .replaceAll('\u00A0', ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+    var cleaned =
+        raw.replaceAll('\u00A0', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
     cleaned = cleaned.replaceAll(RegExp(r'^[:\-•]+|[:\-•]+$'), '').trim();
     if (cleaned.isEmpty || cleaned.length > 28) return null;
     if (!RegExp(r'[A-Za-z가-힣А-Яа-я]').hasMatch(cleaned)) return null;

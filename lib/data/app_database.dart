@@ -174,6 +174,11 @@ class AppDatabase {
             value TEXT NOT NULL
           )
         ''');
+
+        await _ensureExtraTables(db);
+      },
+      onOpen: (db) async {
+        await _ensureExtraTables(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -271,6 +276,8 @@ class AppDatabase {
       await txn.delete('timetable_meta');
       await txn.delete('syllabus_weights');
       await txn.delete('hidden_assignments');
+      await txn.delete('local_drafts');
+      await txn.delete('eclass_private_files');
     });
   }
 
@@ -287,6 +294,7 @@ class AppDatabase {
       await txn.delete('timetable_entries');
       await txn.delete('timetable_meta');
       await txn.delete('syllabus_weights');
+      await txn.delete('eclass_private_files');
     });
   }
 
@@ -295,7 +303,9 @@ class AppDatabase {
   Future<AppSettings> getSettings() async {
     final db = await database;
     final rows = await db.query('settings');
-    final map = {for (final r in rows) r['key'] as String: r['value'] as String};
+    final map = {
+      for (final r in rows) r['key'] as String: r['value'] as String
+    };
     return AppSettings(
       themeMode: map['theme_mode'] ?? 'system',
       dynamicColor: (map['dynamic_color'] ?? 'true') == 'true',
@@ -307,12 +317,15 @@ class AppDatabase {
       notifyTimetable: (map['notify_timetable'] ?? 'true') == 'true',
       reminderOffsetMinutes:
           int.tryParse(map['reminder_offset_minutes'] ?? '15') ?? 15,
-      bgSyncEnabled: (map['bg_sync_enabled'] ?? 'false') == 'true',
+      bgSyncEnabled: (map['bg_sync_enabled'] ?? 'true') == 'true',
       bgSyncIntervalHours:
           int.tryParse(map['bg_sync_interval_hours'] ?? '2') ?? 2,
       timetableGroup: map['timetable_group'] ?? '',
+      timetableGroupAutoDetected:
+          (map['timetable_group_auto_detected'] ?? 'false') == 'true',
       lastSyncAt: int.tryParse(map['last_sync_at'] ?? '0') ?? 0,
       hapticsEnabled: (map['haptics_enabled'] ?? 'true') == 'true',
+      diagnosticsEnabled: (map['diagnostics_enabled'] ?? 'false') == 'true',
     );
   }
 
@@ -329,7 +342,8 @@ class AppDatabase {
 
   Future<List<Course>> getCourses() async {
     final db = await database;
-    final rows = await db.query('courses', orderBy: 'is_current DESC, name ASC');
+    final rows =
+        await db.query('courses', orderBy: 'is_current DESC, name ASC');
     return rows.map(Course.fromMap).toList();
   }
 
@@ -361,8 +375,8 @@ class AppDatabase {
       String courseId, List<Assignment> items) async {
     final db = await database;
     await db.transaction((txn) async {
-      await txn.delete('assignments',
-          where: 'course_id = ?', whereArgs: [courseId]);
+      await txn
+          .delete('assignments', where: 'course_id = ?', whereArgs: [courseId]);
       for (final item in items) {
         await txn.insert('assignments', item.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace);
@@ -385,8 +399,8 @@ class AppDatabase {
 
   Future<List<GradeItem>> getGrades(String courseId) async {
     final db = await database;
-    final rows = await db.query('grades',
-        where: 'course_id = ?', whereArgs: [courseId]);
+    final rows =
+        await db.query('grades', where: 'course_id = ?', whereArgs: [courseId]);
     return rows.map(GradeItem.fromMap).toList();
   }
 
@@ -420,8 +434,8 @@ class AppDatabase {
 
   Future<List<CourseFile>> getCourseFiles(String courseId) async {
     final db = await database;
-    final rows = await db.query('course_files',
-        where: 'course_id = ?', whereArgs: [courseId]);
+    final rows = await db
+        .query('course_files', where: 'course_id = ?', whereArgs: [courseId]);
     return rows.map(CourseFile.fromMap).toList();
   }
 
@@ -437,9 +451,8 @@ class AppDatabase {
       await txn.delete('course_files',
           where: 'course_id = ?', whereArgs: [courseId]);
       for (final f in files) {
-        final merged = f.localPath != null
-            ? f
-            : f.copyWith(localPath: localMap[f.url]);
+        final merged =
+            f.localPath != null ? f : f.copyWith(localPath: localMap[f.url]);
         await txn.insert('course_files', merged.toMap());
       }
     });
@@ -577,7 +590,8 @@ class AppDatabase {
 
   Future<Set<String>> getHiddenAssignmentIds() async {
     final db = await database;
-    final rows = await db.query('hidden_assignments', columns: ['assignment_id']);
+    final rows =
+        await db.query('hidden_assignments', columns: ['assignment_id']);
     return rows.map((r) => r['assignment_id'] as String).toSet();
   }
 
@@ -599,5 +613,81 @@ class AppDatabase {
         whereArgs: [assignmentId],
       );
     }
+  }
+
+  // ── Local Submission Drafts ─────────────────────────────────
+
+  Future<void> _ensureExtraTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS local_drafts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        assignment_id TEXT NOT NULL,
+        assign_id INTEGER,
+        course_id TEXT NOT NULL,
+        course_name TEXT NOT NULL,
+        assignment_name TEXT NOT NULL,
+        due TEXT NOT NULL DEFAULT '',
+        due_timestamp INTEGER NOT NULL DEFAULT 0,
+        assignment_url TEXT,
+        file_path TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        file_size INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS eclass_private_files (
+        id TEXT PRIMARY KEY,
+        filename TEXT NOT NULL,
+        filepath TEXT NOT NULL DEFAULT '/',
+        size INTEGER NOT NULL DEFAULT 0,
+        size_text TEXT NOT NULL DEFAULT '',
+        modified_at INTEGER NOT NULL DEFAULT 0,
+        modified_text TEXT NOT NULL DEFAULT '',
+        download_url TEXT NOT NULL DEFAULT '',
+        file_type TEXT NOT NULL DEFAULT ''
+      )
+    ''');
+  }
+
+  Future<List<LocalDraft>> getLocalDrafts() async {
+    final db = await database;
+    final rows = await db.query('local_drafts', orderBy: 'updated_at DESC');
+    return rows.map(LocalDraft.fromMap).toList();
+  }
+
+  Future<int> saveLocalDraft(LocalDraft draft) async {
+    final db = await database;
+    return db.insert('local_drafts', draft.toMap());
+  }
+
+  Future<void> deleteLocalDraft(int id) async {
+    final db = await database;
+    await db.delete('local_drafts', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ── eClass Private Files ────────────────────────────────────
+
+  Future<List<EclassPrivateFile>> getEclassPrivateFiles() async {
+    final db = await database;
+    final rows = await db.query(
+      'eclass_private_files',
+      orderBy: 'modified_at DESC, filename ASC',
+    );
+    return rows.map(EclassPrivateFile.fromMap).toList();
+  }
+
+  Future<void> saveEclassPrivateFiles(List<EclassPrivateFile> files) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('eclass_private_files');
+      for (final f in files) {
+        await txn.insert(
+          'eclass_private_files',
+          f.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
   }
 }
