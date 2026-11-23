@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/update_service.dart';
 import '../../state/app_state.dart';
 import '../widgets/app_haptics.dart';
 import '../widgets/expressive_sheets.dart';
 import '../widgets/expressive_widgets.dart';
+import 'drafts_screen.dart';
+import 'logs_screen.dart';
+import 'privacy_policy_screen.dart';
 import 'widget_gallery_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -68,46 +72,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _pickReminderOffset(
-      BuildContext context, AppState app) async {
-    final s = app.s;
-    final cs = Theme.of(context).colorScheme;
-    final chosen = await showModalBottomSheet<int>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => ListView(
-        shrinkWrap: true,
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        children: [
-          Text(
-            s.reminderOffset,
-            style: Theme.of(ctx)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 12),
-          for (final m in const [5, 10, 15, 30, 60])
-            ListTile(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              title: Text(s.isRu ? '$m мин' : '$m min'),
-              trailing: app.settings.reminderOffsetMinutes == m
-                  ? Icon(Icons.check_circle_rounded, color: cs.primary)
-                  : null,
-              onTap: () => Navigator.pop(ctx, m),
-            ),
-        ],
-      ),
-    );
-    if (chosen != null) {
-      await app.updateSettings(
-        app.settings.copyWith(reminderOffsetMinutes: chosen),
-      );
-    }
-  }
-
   Future<void> _confirmLogout(BuildContext context, AppState app) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -144,13 +108,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final settings = app.settings;
 
     final studentId = app.credentials?.studentId ?? '';
-    final studentName = formatPersonName(app.insData?.studentInfo['name'] ?? '');
+    final studentName =
+        formatPersonName(app.insData?.studentInfo['name'] ?? '');
     final gradeYear = (app.insData?.studentInfo['grade_year'] ?? '').trim();
     final displayName = studentName.isNotEmpty ? studentName : studentId;
-    final hasCustomIns =
-        (app.credentials?.insPassword ?? '').trim().isNotEmpty;
-    final offsetLabel =
-        '${settings.reminderOffsetMinutes} ${s.isRu ? "мин" : "min"}';
+    final hasCustomIns = (app.credentials?.insPassword ?? '').trim().isNotEmpty;
 
     return Scaffold(
       appBar: ExpressiveAppBar(
@@ -202,6 +164,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       InitialsAvatar(
                         name: displayName,
+                        imagePath: app.profileAvatarPath,
                         size: 48,
                         showVerifiedBadge: true,
                       ),
@@ -605,29 +568,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  s.classRemindersTitle,
-                                  style: tt.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              ExpressivePill(
-                                label: offsetLabel,
-                                backgroundColor: cs.surfaceContainerHigh,
-                                foregroundColor: cs.primary,
-                                fontWeight: FontWeight.w700,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 9, vertical: 3),
-                                onTap: () => _pickReminderOffset(context, app),
-                              ),
-                            ],
+                          Text(
+                            s.classRemindersTitle,
+                            style: tt.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                          const SizedBox(height: 2),
                           Text(
                             s.classRemindersBefore(
                                 settings.reminderOffsetMinutes),
@@ -647,6 +593,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ],
                 ),
+                if (settings.notifyTimetable) ...[
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: ExpressiveSegmentedControl<int>(
+                      expand: false,
+                      itemPadding: const EdgeInsets.symmetric(
+                        horizontal: 11,
+                        vertical: 6,
+                      ),
+                      segments: [
+                        ExpressiveSegment(
+                            value: 5, label: s.isRu ? '5м' : '5m'),
+                        ExpressiveSegment(
+                            value: 10, label: s.isRu ? '10м' : '10m'),
+                        ExpressiveSegment(
+                            value: 15, label: s.isRu ? '15м' : '15m'),
+                        ExpressiveSegment(
+                            value: 30, label: s.isRu ? '30м' : '30m'),
+                        ExpressiveSegment(
+                            value: 60, label: s.isRu ? '1ч' : '1h'),
+                      ],
+                      selected: settings.reminderOffsetMinutes,
+                      onChanged: (m) => app.updateSettings(
+                        settings.copyWith(reminderOffsetMinutes: m),
+                      ),
+                    ),
+                  ),
+                ],
                 _divider(cs),
                 Row(
                   children: [
@@ -881,11 +856,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               showQuickToast(context, s.upToDateToast);
                             } else if (res.status ==
                                 UpdateCheckStatus.unavailable) {
-                              showQuickToast(
-                                  context, s.updateRepoPrivateToast);
+                              showQuickToast(context, s.updateRepoPrivateToast);
                             } else {
-                              showQuickToast(
-                                  context, s.updateCheckFailedToast);
+                              showQuickToast(context, s.updateCheckFailedToast);
                             }
                           },
                     child: Padding(
@@ -946,6 +919,260 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               size: 20,
                               color: cs.onSurfaceVariant,
                             ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                _divider(cs),
+                Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    key: const ValueKey('settings_drafts_btn'),
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () {
+                      AppHaptics.selection();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const DraftsScreen(),
+                        ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 6),
+                      child: Row(
+                        children: [
+                          SquircleIcon(
+                            size: 40,
+                            radius: 14,
+                            iconSize: 20,
+                            icon: Icons.folder_copy_outlined,
+                            backgroundColor: cs.primaryFixed,
+                            iconColor: cs.onPrimaryFixed,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.draftsTitle,
+                                  style: tt.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  s.draftsSub,
+                                  style: tt.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          if (app.totalDraftsCount > 0)
+                            ExpressivePill(
+                              label: '${app.totalDraftsCount}',
+                              backgroundColor: cs.tertiaryFixed,
+                              foregroundColor: cs.onTertiaryFixed,
+                              fontWeight: FontWeight.w700,
+                            )
+                          else
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              size: 20,
+                              color: cs.onSurfaceVariant,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                _divider(cs),
+                Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    key: const ValueKey('privacy_policy_btn'),
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () {
+                      AppHaptics.selection();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const PrivacyPolicyScreen(),
+                        ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 6),
+                      child: Row(
+                        children: [
+                          SquircleIcon(
+                            size: 40,
+                            radius: 14,
+                            iconSize: 20,
+                            icon: Icons.verified_user_outlined,
+                            backgroundColor: cs.primaryFixed,
+                            iconColor: cs.onPrimaryFixed,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.privacyPolicyTitle,
+                                  style: tt.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  s.privacyPolicySub,
+                                  style: tt.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 20,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                _divider(cs),
+                Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    key: const ValueKey('settings_logs_btn'),
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () {
+                      AppHaptics.selection();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const LogsScreen(),
+                        ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 6),
+                      child: Row(
+                        children: [
+                          SquircleIcon(
+                            size: 40,
+                            radius: 14,
+                            iconSize: 20,
+                            icon: Icons.bug_report_outlined,
+                            backgroundColor: cs.primaryFixed,
+                            iconColor: cs.onPrimaryFixed,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.logsTitle,
+                                  style: tt.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  s.logsSub,
+                                  style: tt.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ExpressivePill(
+                            label: app.settings.diagnosticsEnabled
+                                ? s.logsStatusOn
+                                : s.logsStatusOff,
+                            backgroundColor: app.settings.diagnosticsEnabled
+                                ? cs.primaryFixed
+                                : cs.surfaceContainerHigh,
+                            foregroundColor: app.settings.diagnosticsEnabled
+                                ? cs.onPrimaryFixed
+                                : cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                _divider(cs),
+                Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    key: const ValueKey('github_repo_btn'),
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () {
+                      AppHaptics.selection();
+                      launchUrl(
+                        Uri.parse(UpdateService.repoWebUrl),
+                        mode: LaunchMode.externalApplication,
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 6),
+                      child: Row(
+                        children: [
+                          SquircleIcon(
+                            size: 40,
+                            radius: 14,
+                            iconSize: 20,
+                            icon: Icons.code_rounded,
+                            backgroundColor: cs.primaryFixed,
+                            iconColor: cs.onPrimaryFixed,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.githubRepoTitle,
+                                  style: tt.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  s.githubRepoSub,
+                                  style: tt.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.open_in_new_rounded,
+                            size: 18,
+                            color: cs.onSurfaceVariant,
+                          ),
                         ],
                       ),
                     ),

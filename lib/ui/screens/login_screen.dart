@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../state/app_state.dart';
 import '../widgets/expressive_widgets.dart';
+import 'privacy_policy_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -122,8 +123,8 @@ class _LoginScreenState extends State<LoginScreen> {
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 24),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 420),
                   child: Form(
@@ -249,8 +250,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                       size: 20,
                                       color: cs.onSurfaceVariant,
                                     ),
-                                    onPressed: () => setState(() =>
-                                        _obscureEclass = !_obscureEclass),
+                                    onPressed: () => setState(
+                                        () => _obscureEclass = !_obscureEclass),
                                   ),
                                 ),
                                 validator: (v) => (v == null || v.isEmpty)
@@ -292,8 +293,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: Row(
                                     children: [
                                       Icon(Icons.error_outline_rounded,
-                                          size: 18,
-                                          color: cs.onErrorContainer),
+                                          size: 18, color: cs.onErrorContainer),
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
@@ -347,8 +347,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-                                        const Icon(
-                                            Icons.arrow_forward_rounded,
+                                        const Icon(Icons.arrow_forward_rounded,
                                             size: 19),
                                       ],
                                     ],
@@ -376,7 +375,27 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 22),
+                        const SizedBox(height: 10),
+                        Center(
+                          child: TextButton.icon(
+                            key: const ValueKey('login_privacy_btn'),
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const PrivacyPolicyScreen(),
+                              ),
+                            ),
+                            icon: const Icon(Icons.verified_user_outlined,
+                                size: 16),
+                            label: Text(
+                              s.privacyPolicyTitle,
+                              style: tt.labelMedium?.copyWith(
+                                color: cs.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [

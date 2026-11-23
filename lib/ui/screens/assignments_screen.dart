@@ -11,6 +11,7 @@ import '../widgets/expressive_sheets.dart';
 import '../widgets/expressive_widgets.dart';
 import 'assignment_detail_screen.dart';
 import 'course_detail_screen.dart';
+import 'drafts_screen.dart';
 
 class AssignmentsScreen extends StatefulWidget {
   const AssignmentsScreen({super.key});
@@ -128,6 +129,26 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
         title: s.navAssignments,
         overline: s.portalHeader,
         actions: [
+          CircleActionButton(
+            key: const ValueKey('open_drafts_btn'),
+            icon: Icons.folder_copy_outlined,
+            tooltip: s.draftsTitle,
+            backgroundColor: app.totalDraftsCount > 0
+                ? cs.primaryFixed
+                : cs.surfaceContainer,
+            iconColor: app.totalDraftsCount > 0
+                ? cs.onPrimaryFixed
+                : cs.onSurfaceVariant,
+            onPressed: () {
+              AppHaptics.selection();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const DraftsScreen(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
           CircleActionButton(
             icon: Icons.refresh_rounded,
             tooltip: s.refresh,
@@ -366,8 +387,8 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
               )
             else
               for (int i = 0; i < filtered.length; i++) ...[
-                _buildCard(context, app, filtered[i], effectiveFilter == 'hidden',
-                    nowSec),
+                _buildCard(context, app, filtered[i],
+                    effectiveFilter == 'hidden', nowSec),
                 if (i != filtered.length - 1) const SizedBox(height: 12),
               ],
           ],

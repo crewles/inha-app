@@ -336,6 +336,7 @@ class _InsScreenState extends State<InsScreen> {
                   children: [
                     InitialsAvatar(
                       name: displayName,
+                      imagePath: app.profileAvatarPath,
                       size: 44,
                       backgroundColor: Colors.white.withValues(alpha: 0.2),
                       foregroundColor: Colors.white,
@@ -370,8 +371,8 @@ class _InsScreenState extends State<InsScreen> {
                 ),
                 const SizedBox(height: 16),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 14),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(18),

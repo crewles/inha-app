@@ -5,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/models.dart';
 import '../../services/eclass_service.dart';
-import '../../services/timetable_service.dart';
 import '../../state/app_state.dart';
 import '../widgets/app_haptics.dart';
 import '../widgets/expressive_sheets.dart';
@@ -623,42 +622,31 @@ class CoursesScreen extends StatelessWidget {
                           ),
                         ),
                       if (classroom.isNotEmpty || slots.isNotEmpty)
-                        InkWell(
-                          borderRadius: BorderRadius.circular(8),
-                          onTap: () {
-                            AppHaptics.light();
-                            app.openTab(
-                              2,
-                              timetableDay:
-                                  TimetableService.firstDayIndex(schedule),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 1),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.meeting_room_outlined,
-                                  size: 15,
-                                  color: cs.onSurfaceVariant,
-                                ),
-                                const SizedBox(width: 4),
-                                Flexible(
-                                  child: Text(
-                                    [
-                                      if (classroom.isNotEmpty) classroom,
-                                      if (slots.isNotEmpty) slots,
-                                    ].join(' • '),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: tt.bodySmall?.copyWith(
-                                      color: cs.onSurfaceVariant,
-                                    ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 1),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.meeting_room_outlined,
+                                size: 15,
+                                color: cs.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  [
+                                    if (classroom.isNotEmpty) classroom,
+                                    if (slots.isNotEmpty) slots,
+                                  ].join(' • '),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: tt.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                     ],
