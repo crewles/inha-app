@@ -2,8 +2,19 @@ name: Build & Release Android APK
 
 on:
   push:
-    branches: [main]
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Create/update GitHub Release for pubspec.yaml version'
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -19,16 +30,39 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - uses: gradle/actions/setup-gradle@v4
+
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
 
-      - name: Read app version
+      - name: Resolve release version & tag
         id: ver
         run: |
-          VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
+          PUBSPEC_VER=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+            BASE_TAG_VER="${VERSION%%-*}"
+            if [ "$BASE_TAG_VER" != "$PUBSPEC_VER" ]; then
+              echo "::warning::Tag version ($VERSION) differs from pubspec.yaml ($PUBSPEC_VER); building APK with --build-name=$VERSION"
+            fi
+          else
+            VERSION="$PUBSPEC_VER"
+            TAG="v${VERSION}"
+          fi
+
+          if echo "$TAG" | grep -q '-'; then
+            IS_PRERELEASE="true"
+          else
+            IS_PRERELEASE="false"
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "Resolved release tag=$TAG version=$VERSION prerelease=$IS_PRERELEASE"
 
       - name: Configure Android Release Signing
         env:
@@ -49,31 +83,38 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Analyze code
+        run: flutter analyze --no-pub
+
       - name: Run tests
-        run: flutter test
+        run: flutter test --no-pub
 
       - name: Build arm64 Release APK
-        run: flutter build apk --release --target-platform android-arm64 --build-number=$((100 + GITHUB_RUN_NUMBER))
+        run: flutter build apk --release --target-platform android-arm64 --build-name="${{ steps.ver.outputs.version }}" --build-number=$((100 + GITHUB_RUN_NUMBER))
 
       - name: Rename APK
-        run: cp build/app/outputs/flutter-apk/app-release.apk "inha-app-v${{ steps.ver.outputs.version }}-arm64.apk"
+        run: cp build/app/outputs/flutter-apk/app-release.apk "inha-app-${{ steps.ver.outputs.tag }}-arm64.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: inha-app-arm64-release-apk
-          path: inha-app-v${{ steps.ver.outputs.version }}-arm64.apk
+          name: inha-app-${{ steps.ver.outputs.tag }}-arm64-apk
+          path: inha-app-${{ steps.ver.outputs.tag }}-arm64.apk
 
-      - name: Attach APK to Release
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag' || inputs.publish_release == true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v${{ steps.ver.outputs.version }}"
-          APK="inha-app-v${{ steps.ver.outputs.version }}-arm64.apk"
+          TAG="${{ steps.ver.outputs.tag }}"
+          APK="inha-app-${TAG}-arm64.apk"
+          IS_PRERELEASE="${{ steps.ver.outputs.is_prerelease }}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$APK" --clobber
           else
-            gh release create "$TAG" "$APK" \
-              --title "Inha App $TAG (arm64-v8a)" \
-              --generate-notes
+            ARGS=("$TAG" "$APK" "--title" "Inha App $TAG (arm64-v8a)" "--generate-notes")
+            if [ "$IS_PRERELEASE" = "true" ]; then
+              ARGS+=("--prerelease")
+            fi
+            gh release create "${ARGS[@]}"
           fi
