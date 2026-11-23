@@ -1154,7 +1154,8 @@ void main() {
     );
     expect(find.text('Check for updates'), findsOneWidget);
     expect(
-        find.text('Current version v1.1.1 • GitHub Releases'), findsOneWidget);
+        find.text('Current version v${UpdateService.currentVersion} • GitHub Releases'),
+        findsOneWidget);
   });
 
   test('Assignment isDraft and isSubmitted classify drafts vs submitted', () {

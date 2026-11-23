@@ -24,7 +24,7 @@ class UpdateCheckResult {
 /// Checks GitHub Releases for `crewles/inha-app` and bridges native Android
 /// platform actions (APK installer, home-screen widget updates/pinning).
 class UpdateService {
-  static const String currentVersion = '1.1.1';
+  static const String currentVersion = '1.2.0';
   static const String repoOwner = 'crewles';
   static const String repoName = 'inha-app';
   static const String latestReleaseApi =
