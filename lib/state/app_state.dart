@@ -7,14 +7,19 @@ import 'package:path_provider/path_provider.dart';
 import '../data/app_database.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
+import '../services/app_logger.dart';
 import '../services/eclass_service.dart';
 import '../services/ins_service.dart';
 import '../services/notification_service.dart';
 import '../services/timetable_service.dart';
 import '../services/update_service.dart';
+import '../ui/screens/assignment_detail_screen.dart';
+import '../ui/screens/course_detail_screen.dart';
 import '../ui/widgets/app_haptics.dart';
 
 class AppState extends ChangeNotifier {
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
   final AppDatabase _db = AppDatabase.instance;
   final EclassService eclass = EclassService();
   final InsService _ins = InsService();
@@ -23,6 +28,7 @@ class AppState extends ChangeNotifier {
 
   bool isInitializing = true;
   bool isSyncing = false;
+  bool isSyncingPrivateFiles = false;
   bool isInsLoading = false;
   bool isTimetableLoading = false;
   bool isCheckingUpdate = false;
@@ -36,6 +42,8 @@ class AppState extends ChangeNotifier {
   AppSettings settings = const AppSettings();
   List<Course> courses = [];
   List<Assignment> allAssignments = [];
+  List<EclassPrivateFile> eclassPrivateFiles = [];
+  List<LocalDraft> localDrafts = [];
   Set<String> hiddenAssignmentIds = {};
   final Map<String, List<GradeItem>> gradesByCourse = {};
   final Map<String, List<SyllabusWeight>> syllabusWeightsByCourse = {};
@@ -46,6 +54,9 @@ class AppState extends ChangeNotifier {
   String timetableLabel = '';
   AppReleaseInfo? availableUpdate;
   bool updateBannerDismissed = false;
+  String? profileAvatarPath;
+  List<String> _groupHints = [];
+  bool _autoDetectInFlight = false;
 
   S get s => S(settings.language);
   bool get isLoggedIn => credentials != null;
@@ -64,6 +75,14 @@ class AppState extends ChangeNotifier {
   List<Assignment> get hiddenAssignments =>
       allAssignments.where((a) => hiddenAssignmentIds.contains(a.id)).toList();
 
+  List<Assignment> get eclassDraftAssignments =>
+      activeAssignments.where((a) => a.isDraft).toList();
+
+  int get totalDraftsCount =>
+      eclassDraftAssignments.length +
+      eclassPrivateFiles.length +
+      localDrafts.length;
+
   void openTab(int index, {int? timetableDay}) {
     activeTabIndex = index.clamp(0, 4);
     if (timetableDay != null) {
@@ -76,6 +95,66 @@ class AppState extends ChangeNotifier {
     final day = _pendingTimetableDay;
     _pendingTimetableDay = null;
     return day;
+  }
+
+  void handleNotificationPayload(String payload) {
+    if (!isLoggedIn) return;
+    if (payload.startsWith('assignment::')) {
+      final id = payload.substring('assignment::'.length);
+      openTab(1);
+      final matched = allAssignments.cast<Assignment?>().firstWhere(
+            (a) => a?.id == id,
+            orElse: () => null,
+          );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final nav = navigatorKey.currentState;
+        if (nav == null) return;
+        nav.popUntil((r) => r.isFirst);
+        if (matched != null) {
+          nav.push(
+            MaterialPageRoute(
+              builder: (_) => AssignmentDetailScreen(assignment: matched),
+            ),
+          );
+        }
+      });
+      return;
+    }
+    if (payload.startsWith('course_grades::')) {
+      final cid = payload.substring('course_grades::'.length);
+      openTab(0);
+      final matched = courses.cast<Course?>().firstWhere(
+            (c) => c?.id == cid,
+            orElse: () => null,
+          );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final nav = navigatorKey.currentState;
+        if (nav == null) return;
+        nav.popUntil((r) => r.isFirst);
+        if (matched != null) {
+          nav.push(
+            MaterialPageRoute(
+              builder: (_) =>
+                  CourseDetailScreen(course: matched, initialTab: 1),
+            ),
+          );
+        }
+      });
+      return;
+    }
+    if (payload.startsWith('timetable::')) {
+      final dayIdx = int.tryParse(payload.substring('timetable::'.length));
+      navigatorKey.currentState?.popUntil((r) => r.isFirst);
+      openTab(2, timetableDay: dayIdx);
+      return;
+    }
+    if (payload.startsWith('tab::')) {
+      final tab = int.tryParse(payload.substring('tab::'.length));
+      if (tab != null) {
+        navigatorKey.currentState?.popUntil((r) => r.isFirst);
+        openTab(tab);
+      }
+    }
   }
 
   Course? findCourseForSubject(String subject) =>
@@ -106,6 +185,14 @@ class AppState extends ChangeNotifier {
 
     settings = await _db.getSettings();
     AppHaptics.enabled = settings.hapticsEnabled;
+    await AppLogger.instance.init(enabled: settings.diagnosticsEnabled);
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final avatarFile = File(p.join(dir.path, 'profile_avatar.jpg'));
+      if (await avatarFile.exists()) {
+        profileAvatarPath = avatarFile.path;
+      }
+    } catch (_) {}
     credentials = await _db.getCredentials();
     if (credentials != null) {
       eclass.restoreCredentials(credentials!);
@@ -114,6 +201,8 @@ class AppState extends ChangeNotifier {
     // Load full offline cache from SQLite immediately
     courses = await _db.getCourses();
     allAssignments = await _db.getAssignments();
+    eclassPrivateFiles = await _db.getEclassPrivateFiles();
+    localDrafts = await _db.getLocalDrafts();
     hiddenAssignmentIds = await _db.getHiddenAssignmentIds();
     insData = await _db.getInsData();
     timetableEntries = await _db.getTimetableEntries();
@@ -131,7 +220,10 @@ class AppState extends ChangeNotifier {
     isInitializing = false;
     notifyListeners();
 
+    autoDetectTimetableGroupIfNeeded();
+
     await NotificationService.instance.init();
+    NotificationService.instance.setOnPayloadTap(handleNotificationPayload);
     await _rescheduleAllNotifications();
     await NotificationService.instance.configureBackgroundSync(
       enabled: isLoggedIn && settings.bgSyncEnabled,
@@ -178,11 +270,33 @@ class AppState extends ChangeNotifier {
     await _db.saveCredentials(credentials!);
     notifyListeners();
 
+    await NotificationService.instance.configureBackgroundSync(
+      enabled: settings.bgSyncEnabled,
+      intervalHours: settings.bgSyncIntervalHours,
+    );
     await syncCourses(silent: true);
+    syncProfilePhoto();
     syncAllAssignments();
+    syncPrivateFiles(silent: true);
     syncTimetable(silent: true);
     syncIns(silent: true);
     return true;
+  }
+
+  Future<void> syncProfilePhoto() async {
+    if (!isLoggedIn) return;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final targetPath = p.join(dir.path, 'profile_avatar.jpg');
+      final path = await eclass.downloadProfilePhoto(targetPath);
+      if (path != null) {
+        profileAvatarPath = path;
+        notifyListeners();
+        AppLogger.instance.info('AVATAR', 'Synced eClass profile photo');
+      }
+    } catch (e) {
+      AppLogger.instance.error('AVATAR', 'Failed to sync profile photo', e);
+    }
   }
 
   Future<void> saveInsPassword(String password) async {
@@ -200,17 +314,45 @@ class AppState extends ChangeNotifier {
   Future<void> logout() async {
     eclass.clearSession();
     await _db.clearAllData();
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final stagedDir = Directory(p.join(dir.path, 'staged_drafts'));
+      if (await stagedDir.exists()) {
+        await stagedDir.delete(recursive: true);
+      }
+      final downloadsDir = Directory(p.join(dir.path, 'downloads'));
+      if (await downloadsDir.exists()) {
+        await downloadsDir.delete(recursive: true);
+      }
+      final avatarFile = File(p.join(dir.path, 'profile_avatar.jpg'));
+      if (await avatarFile.exists()) {
+        await avatarFile.delete();
+      }
+    } catch (_) {}
+    await AppLogger.instance.clear();
     await NotificationService.instance
         .configureBackgroundSync(enabled: false, intervalHours: 2);
+    settings = settings.copyWith(
+      timetableGroup: '',
+      timetableGroupAutoDetected: false,
+    );
+    await _db.saveSetting('timetable_group', '');
+    await _db.saveSetting('timetable_group_auto_detected', 'false');
     credentials = null;
+    profileAvatarPath = null;
+    _groupHints = [];
     courses = [];
     allAssignments = [];
+    eclassPrivateFiles = [];
+    localDrafts = [];
     hiddenAssignmentIds = {};
     gradesByCourse.clear();
     syllabusWeightsByCourse.clear();
     attendanceByCourse.clear();
     filesByCourse.clear();
     insData = null;
+    timetableEntries = [];
+    timetableLabel = '';
     lastError = null;
     insError = null;
     activeTabIndex = 0;
@@ -238,8 +380,15 @@ class AppState extends ChangeNotifier {
         await _db.saveCredentials(credentials!);
       }
       await _updateLastSync();
+      AppLogger.instance.info(
+        'ECLASS',
+        'Synced ${courses.length} courses (${visibleCourses.length} visible)',
+      );
+      syncProfilePhoto();
+      autoDetectTimetableGroupIfNeeded(refreshHints: true);
     } catch (e) {
       lastError = e.toString();
+      AppLogger.instance.error('ECLASS', 'syncCourses failed', e);
     } finally {
       isSyncing = false;
       notifyListeners();
@@ -298,6 +447,7 @@ class AppState extends ChangeNotifier {
               id: a.id.hashCode,
               title: course.name,
               body: '${a.name}${a.due.isNotEmpty ? ' • ${a.due}' : ''}',
+              payload: 'assignment::${a.id}',
             );
           }
         }
@@ -315,6 +465,7 @@ class AppState extends ChangeNotifier {
               id: ('${course.id}::$key').hashCode,
               title: '${course.name} • ${s.notifyGrades}',
               body: '${g.name}: $v',
+              payload: 'course_grades::${course.id}',
             );
           }
         }
@@ -366,7 +517,9 @@ class AppState extends ChangeNotifier {
             await _db.saveCourseAssignments(entry.key, entry.value);
           }
         }
-      } catch (_) {
+      } catch (e) {
+        AppLogger.instance.error(
+            'ECLASS', 'Batch assignments sync fell back to per-course', e);
         for (final c in targetCourses) {
           try {
             final assigns = await eclass.getAssignments(c.id, c.name);
@@ -376,6 +529,8 @@ class AppState extends ChangeNotifier {
       }
 
       allAssignments = await _db.getAssignments();
+      AppLogger.instance
+          .info('ECLASS', 'Synced ${allAssignments.length} assignments');
       if (oldIds.isNotEmpty && settings.notifyAssignments) {
         for (final a in allAssignments) {
           if (!oldIds.contains(a.id) && !hiddenAssignmentIds.contains(a.id)) {
@@ -383,6 +538,7 @@ class AppState extends ChangeNotifier {
               id: a.id.hashCode,
               title: a.courseName,
               body: '${a.name}${a.due.isNotEmpty ? ' • ${a.due}' : ''}',
+              payload: 'assignment::${a.id}',
             );
           }
         }
@@ -390,6 +546,7 @@ class AppState extends ChangeNotifier {
       await _rescheduleDeadlineReminders();
       await _updateLastSync();
       await UpdateService.refreshHomeWidgets();
+      syncPrivateFiles(silent: true);
     } finally {
       isSyncing = false;
       notifyListeners();
@@ -476,20 +633,28 @@ class AppState extends ChangeNotifier {
                 id: ('ins::$key').hashCode,
                 title: 'INS • ${s.notifyGrades}',
                 body: '${c.title.isNotEmpty ? c.title : c.courseNumber}: $g',
+                payload: 'tab::3',
               );
             }
           }
         }
         await UpdateService.refreshHomeWidgets();
+        AppLogger.instance.info(
+          'INS',
+          'Synced ${data.courses.length} INS grade rows',
+        );
+        autoDetectTimetableGroupIfNeeded();
         return true;
       }
       insError = s.insNoData;
       return false;
     } on InsException catch (e) {
       insError = e.message;
+      AppLogger.instance.error('INS', 'INS rejected request', e.message);
       return false;
     } catch (e) {
       insError = e.toString();
+      AppLogger.instance.error('INS', 'syncIns failed', e);
       return false;
     } finally {
       isInsLoading = false;
@@ -509,13 +674,73 @@ class AppState extends ChangeNotifier {
       timetableEntries = entries;
       timetableLabel = label;
       await _db.saveTimetableEntries(entries, ttNum, label);
+      await autoDetectTimetableGroupIfNeeded();
       await _rescheduleClassReminders();
       await UpdateService.refreshHomeWidgets();
-    } catch (_) {
+      AppLogger.instance.info(
+        'TIMETABLE',
+        'Synced ${entries.length} timetable entries',
+      );
+    } catch (e) {
+      AppLogger.instance.error('TIMETABLE', 'syncTimetable failed', e);
     } finally {
       isTimetableLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<void> autoDetectTimetableGroupIfNeeded({
+    bool refreshHints = false,
+  }) async {
+    if (timetableEntries.isEmpty || _autoDetectInFlight) return;
+    final classes = TimetableService.getClasses(timetableEntries);
+    if (classes.isEmpty) return;
+    final currentGroup = settings.timetableGroup.trim();
+    if (currentGroup.isNotEmpty && classes.contains(currentGroup)) return;
+
+    _autoDetectInFlight = true;
+    try {
+      if (isLoggedIn && (refreshHints || _groupHints.isEmpty)) {
+        _groupHints = await eclass.fetchStudentGroupHints();
+      }
+      final stillNeeds = settings.timetableGroup.trim().isEmpty ||
+          !TimetableService.getClasses(timetableEntries)
+              .contains(settings.timetableGroup.trim());
+      if (!stillNeeds) return;
+
+      final detected = TimetableService.detectStudentGroup(
+        entries: timetableEntries,
+        studentId: credentials?.studentId,
+        insDepartment: insData?.studentInfo['dept'],
+        courses: courses,
+        insCourses: insData?.courses ?? const [],
+        eclassHints: _groupHints,
+      );
+      if (detected != null && detected.isNotEmpty) {
+        await updateSettings(
+          settings.copyWith(
+            timetableGroup: detected,
+            timetableGroupAutoDetected: true,
+          ),
+        );
+        AppLogger.instance.info(
+          'TIMETABLE',
+          'Auto-detected timetable group: $detected',
+        );
+      }
+    } catch (e) {
+      AppLogger.instance
+          .error('TIMETABLE', 'autoDetectTimetableGroup failed', e);
+    } finally {
+      _autoDetectInFlight = false;
+    }
+  }
+
+  Future<void> confirmTimetableGroup() async {
+    if (!settings.timetableGroupAutoDetected) return;
+    await updateSettings(
+      settings.copyWith(timetableGroupAutoDetected: false),
+    );
   }
 
   // ── Hidden Deadlines & Updates ──────────────────────────────
@@ -578,7 +803,14 @@ class AppState extends ChangeNotifier {
     await _db.saveSetting(
         'bg_sync_interval_hours', updated.bgSyncIntervalHours.toString());
     await _db.saveSetting('timetable_group', updated.timetableGroup);
+    await _db.saveSetting(
+      'timetable_group_auto_detected',
+      updated.timetableGroupAutoDetected.toString(),
+    );
     await _db.saveSetting('haptics_enabled', updated.hapticsEnabled.toString());
+    await _db.saveSetting(
+        'diagnostics_enabled', updated.diagnosticsEnabled.toString());
+    AppLogger.instance.enabled = updated.diagnosticsEnabled;
     notifyListeners();
 
     await _rescheduleAllNotifications();
@@ -643,6 +875,7 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
     courses = [];
     allAssignments = [];
+    eclassPrivateFiles = [];
     gradesByCourse.clear();
     syllabusWeightsByCourse.clear();
     attendanceByCourse.clear();
@@ -658,5 +891,137 @@ class AppState extends ChangeNotifier {
     final now = DateTime.now().millisecondsSinceEpoch;
     settings = settings.copyWith(lastSyncAt: now);
     await _db.saveSetting('last_sync_at', now.toString());
+  }
+
+  // ── Local Draft Staging (#8) ────────────────────────────────
+
+  Future<void> stageLocalDraft({
+    required Assignment assignment,
+    required String sourcePath,
+    required String fileName,
+  }) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    var destPath = sourcePath;
+    var fileSize = 0;
+
+    final srcFile = File(sourcePath);
+    if (await srcFile.exists()) {
+      fileSize = await srcFile.length();
+      try {
+        final dir = await getApplicationDocumentsDirectory();
+        final stagedDir = Directory(p.join(dir.path, 'staged_drafts'));
+        if (!await stagedDir.exists()) {
+          await stagedDir.create(recursive: true);
+        }
+        final copied = await srcFile.copy(
+          p.join(stagedDir.path, '${nowMs}_${p.basename(fileName)}'),
+        );
+        destPath = copied.path;
+      } catch (_) {}
+    }
+
+    await _db.saveLocalDraft(
+      LocalDraft(
+        assignmentId: assignment.id,
+        assignId: assignment.assignId,
+        courseId: assignment.courseId,
+        courseName: assignment.courseName,
+        assignmentName: assignment.name,
+        due: assignment.due,
+        dueTimestamp: assignment.dueTimestamp,
+        assignmentUrl: assignment.url,
+        filePath: destPath,
+        fileName: fileName,
+        fileSize: fileSize,
+        updatedAt: nowMs,
+      ),
+    );
+    localDrafts = await _db.getLocalDrafts();
+    notifyListeners();
+  }
+
+  Future<void> removeLocalDraft(LocalDraft draft) async {
+    try {
+      final f = File(draft.filePath);
+      if (await f.exists()) {
+        await f.delete();
+      }
+    } catch (_) {}
+    if (draft.id != null) {
+      await _db.deleteLocalDraft(draft.id!);
+    }
+    localDrafts = await _db.getLocalDrafts();
+    notifyListeners();
+  }
+
+  Future<void> uploadLocalDraft(
+    LocalDraft draft, {
+    required bool submitForGrading,
+  }) async {
+    final assignId = draft.assignId;
+    if (assignId == null) {
+      throw EclassException('Assignment upload ID unavailable');
+    }
+    await eclass.uploadSubmission(
+      assignId,
+      draft.filePath,
+      draft.fileName,
+      submitForGrading: submitForGrading,
+      assignmentUrl: draft.assignmentUrl,
+    );
+    await removeLocalDraft(draft);
+    if (draft.courseId.isNotEmpty) {
+      await syncCourseAssignments(draft.courseId, draft.courseName);
+    } else {
+      await syncAllAssignments();
+    }
+  }
+
+  // ── eClass Private Files (/user/files.php) ──────────────────
+
+  Future<void> syncPrivateFiles({bool silent = false}) async {
+    if (!isLoggedIn) return;
+    if (!silent) {
+      isSyncingPrivateFiles = true;
+      notifyListeners();
+    }
+    try {
+      final fetched = await eclass.getPrivateFiles();
+      eclassPrivateFiles = fetched;
+      await _db.saveEclassPrivateFiles(fetched);
+      AppLogger.instance.info(
+        'ECLASS',
+        'Synced ${fetched.length} eClass saved files',
+      );
+    } catch (e) {
+      AppLogger.instance.error('ECLASS', 'syncPrivateFiles failed', e);
+    } finally {
+      isSyncingPrivateFiles = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> submitPrivateFileToAssignment({
+    required EclassPrivateFile file,
+    required Assignment assignment,
+    required bool submitForGrading,
+  }) async {
+    final assignId = assignment.assignId;
+    if (assignId == null) {
+      throw EclassException('Assignment upload ID unavailable');
+    }
+    final localPath = await eclass.downloadPrivateFile(file);
+    await eclass.uploadSubmission(
+      assignId,
+      localPath,
+      file.filename,
+      submitForGrading: submitForGrading,
+      assignmentUrl: assignment.url,
+    );
+    if (assignment.courseId.isNotEmpty) {
+      await syncCourseAssignments(assignment.courseId, assignment.courseName);
+    } else {
+      await syncAllAssignments();
+    }
   }
 }

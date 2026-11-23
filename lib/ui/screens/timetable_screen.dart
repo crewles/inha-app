@@ -115,7 +115,10 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
     if (chosen != null) {
       await app.updateSettings(
-        app.settings.copyWith(timetableGroup: chosen),
+        app.settings.copyWith(
+          timetableGroup: chosen,
+          timetableGroupAutoDetected: false,
+        ),
       );
     }
   }
@@ -264,6 +267,117 @@ class _TimetableScreenState extends State<TimetableScreen> {
                       ),
                     ],
                   ),
+                  if (app.settings.timetableGroupAutoDetected &&
+                      group.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    ExpressiveCard(
+                      key: const ValueKey('auto_group_confirm_banner'),
+                      borderRadius: 20,
+                      color: cs.secondaryContainer.withValues(alpha: 0.55),
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SquircleIcon(
+                                size: 36,
+                                radius: 11,
+                                iconSize: 18,
+                                icon: Icons.auto_awesome_rounded,
+                                backgroundColor: cs.primaryFixed,
+                                iconColor: cs.onPrimaryFixed,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      s.autoGroupBannerTitle(group),
+                                      style: tt.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                        color: cs.onSecondaryContainer,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      s.autoGroupBannerQuestion,
+                                      style: tt.bodySmall?.copyWith(
+                                        color: cs.onSecondaryContainer
+                                            .withValues(alpha: 0.85),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              FilledButton.icon(
+                                key: const ValueKey('auto_group_yes_btn'),
+                                onPressed: () {
+                                  AppHaptics.medium();
+                                  app.confirmTimetableGroup();
+                                },
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: cs.primary,
+                                  foregroundColor: cs.onPrimary,
+                                  shape: const StadiumBorder(),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
+                                  minimumSize: const Size(0, 36),
+                                ),
+                                icon: const Icon(Icons.check_rounded, size: 16),
+                                label: Text(
+                                  s.autoGroupYesBtn,
+                                  style: tt.labelMedium?.copyWith(
+                                    color: cs.onPrimary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              OutlinedButton.icon(
+                                key: const ValueKey('auto_group_no_btn'),
+                                onPressed: () {
+                                  AppHaptics.selection();
+                                  _pickGroup(context, app);
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: cs.onSecondaryContainer,
+                                  side: BorderSide(
+                                    color: cs.outlineVariant,
+                                  ),
+                                  shape: const StadiumBorder(),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
+                                  minimumSize: const Size(0, 36),
+                                ),
+                                icon: const Icon(Icons.swap_horiz_rounded,
+                                    size: 16),
+                                label: Text(
+                                  s.autoGroupNoBtn,
+                                  style: tt.labelMedium?.copyWith(
+                                    color: cs.onSecondaryContainer,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (next != null) ...[
                     const SizedBox(height: 14),
                     _buildNextLessonCard(context, app, next, tt, s),

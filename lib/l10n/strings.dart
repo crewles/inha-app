@@ -11,8 +11,8 @@ class S {
       isRu ? 'eClass • INS • Расписание' : 'eClass • INS • Timetable';
   String get portalHeader => 'IUT PORTAL';
   String get campusFooter => isRu
-      ? 'Inha University in Tashkent • Локальный SQLite'
-      : 'Inha University in Tashkent • Local SQLite';
+      ? 'Inha University in Tashkent • Данные только на устройстве'
+      : 'Inha University in Tashkent • Data stays on your device';
   String get appVersion => 'v${UpdateService.currentVersion}';
 
   // Navigation
@@ -25,8 +25,8 @@ class S {
   // Login
   String get loginTitle => isRu ? 'Вход в Inha' : 'Sign in to Inha';
   String get loginSubtitle => isRu
-      ? 'Все данные хранятся локально в SQLite на вашем телефоне'
-      : 'All data is stored locally in SQLite on your device';
+      ? 'Все данные хранятся только на вашем телефоне'
+      : 'All data is stored exclusively on your device';
   String get loginTagline => isRu
       ? 'Ваши курсы, оценки и расписание в одном месте'
       : 'Your classes, grades, and schedule in one place';
@@ -61,12 +61,12 @@ class S {
   String get currentSemester => isRu ? 'Текущий' : 'Current';
   String get allCourses => isRu ? 'Все курсы' : 'All courses';
   String get welcomeBack => isRu ? 'С возвращением' : 'Welcome back';
-  String helloUser(String name) => isRu ? 'Привет, $name 👋' : 'Hello, $name 👋';
+  String helloUser(String name) =>
+      isRu ? 'Привет, $name 👋' : 'Hello, $name 👋';
   String yearLabel(String yr) => isRu ? '$yr курс' : 'Year $yr';
   String get cumulativeGpaCaps => isRu ? 'ОБЩИЙ GPA (INS)' : 'CUMULATIVE GPA';
   String get coursesSummaryLabel => isRu ? 'АКТИВНЫЕ КУРСЫ' : 'ACTIVE COURSES';
-  String activeCoursesCount(int n) =>
-      isRu ? '$n активн.' : '$n Active';
+  String activeCoursesCount(int n) => isRu ? '$n активн.' : '$n Active';
   String tasksDueCount(int n) {
     if (!isRu) return n == 1 ? '1 task due' : '$n tasks due';
     final mod100 = n % 100;
@@ -92,7 +92,7 @@ class S {
   String get syllabus => isRu ? 'Силлабус' : 'Syllabus';
   String get openSyllabus => isRu ? 'Открыть силлабус' : 'Open syllabus';
   String get refresh => isRu ? 'Обновить' : 'Refresh';
-  String get offlineCache => isRu ? 'Локальная база SQLite' : 'Local SQLite DB';
+  String get offlineCache => isRu ? 'Память устройства' : 'On-device storage';
 
   String get courseDetailTitle => isRu ? 'О курсе' : 'Course Detail';
   String get attendanceRecord => isRu ? 'Посещаемость' : 'Attendance Record';
@@ -130,8 +130,7 @@ class S {
       isRu ? '$done из $total сдано' : '$done of $total completed';
   String dueIn7Days(int n) =>
       isRu ? '$n в ближайшие 7 дн.' : '$n due in 7 days';
-  String get allCaughtUpTitle =>
-      isRu ? 'Всё выполнено!' : 'All caught up!';
+  String get allCaughtUpTitle => isRu ? 'Всё выполнено!' : 'All caught up!';
   String get allCaughtUpBody => isRu
       ? 'В этой категории нет заданий. Отличная работа!'
       : 'No assignments found in this category.';
@@ -169,10 +168,18 @@ class S {
   String get noGroupSelected => isRu
       ? 'Выберите свою группу, чтобы увидеть расписание'
       : 'Select your group to view the timetable';
+  String autoGroupBannerTitle(String group) => isRu
+      ? 'Группа $group выбрана автоматически'
+      : 'Group $group selected automatically';
+  String get autoGroupBannerQuestion =>
+      isRu ? 'Это ваша группа?' : 'Is this your group?';
+  String get autoGroupYesBtn => isRu ? 'Да, верно' : 'Yes';
+  String get autoGroupNoBtn => isRu ? 'Нет, выбрать другую' : 'No, pick another';
   String get nextLesson => isRu ? 'Следующая пара' : 'Next Class';
   String get noLessonsToday => isRu ? 'Пар нет' : 'No classes';
-  List<String> get dayLabels =>
-      isRu ? ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  List<String> get dayLabels => isRu
+      ? ['Пн', 'Вт', 'Ср', 'Чт', 'Пт']
+      : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
   List<String> get dayFullNames => isRu
       ? ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница']
       : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -245,8 +252,7 @@ class S {
   String get insSyncSub => isRu
       ? 'Прямое подключение к ins.inha.uz'
       : 'Direct ins.inha.uz connection';
-  String syncUpdatedAgo(String rel) =>
-      isRu ? 'Обновлено: $rel' : 'Sync: $rel';
+  String syncUpdatedAgo(String rel) => isRu ? 'Обновлено: $rel' : 'Sync: $rel';
   String get justNow => isRu ? 'только что' : 'just now';
   String minutesAgo(int m) => isRu ? '$m мин назад' : '${m}m ago';
   String hoursAgo(int h) => isRu ? '$h ч назад' : '${h}h ago';
@@ -255,8 +261,7 @@ class S {
   String get academicSemesters =>
       isRu ? 'Учебные семестры' : 'Academic Semesters';
   String termsCount(int n) => isRu ? '$n сем.' : '$n Terms';
-  String enrolledCourses(int n) =>
-      isRu ? 'Предметы ($n)' : 'Courses ($n)';
+  String enrolledCourses(int n) => isRu ? 'Предметы ($n)' : 'Courses ($n)';
   String get letterGrading => isRu ? 'Буквенные оценки' : 'Letter Grading';
   String ptsLabel(String pts) => isRu ? '$pts б.' : '$pts pts';
 
@@ -281,16 +286,14 @@ class S {
   String get notifyTimetable =>
       isRu ? 'Напоминания о парах (офлайн)' : 'Class reminders (offline)';
   String get reminderOffset => isRu ? 'За сколько до пары' : 'Before class';
-  String get bgSyncLabel => isRu
-      ? 'Фоновая проверка eClass (WorkManager)'
-      : 'Background eClass sync (WorkManager)';
+  String get bgSyncLabel =>
+      isRu ? 'Фоновая проверка eClass' : 'Background eClass sync';
   String get bgSyncSub => isRu
-      ? 'Проверяет новые задания через JSON API в фоне'
-      : 'Checks new assignments via JSON API in background';
+      ? 'Автоматически проверяет новые задания в фоне'
+      : 'Automatically checks for new assignments in the background';
   String get bgSyncInterval => isRu ? 'Интервал проверки' : 'Sync interval';
   String get syncNow => isRu ? 'Обновить всё сейчас' : 'Sync everything now';
-  String get storageSection =>
-      isRu ? 'Локальная база SQLite' : 'Local SQLite Storage';
+  String get storageSection => isRu ? 'Память устройства' : 'On-Device Storage';
   String get clearCache => isRu ? 'Очистить кэш данных' : 'Clear cached data';
   String get cacheCleared => isRu ? 'Кэш очищен' : 'Cache cleared';
   String get changeInsPassword =>
@@ -317,7 +320,8 @@ class S {
   String get matchWallpaperSub => isRu
       ? 'Адаптирует акценты под системные обои Android'
       : 'Derives expressive dynamic accents from system wallpaper';
-  String get displayLanguageTitle => isRu ? 'Язык интерфейса' : 'Display Language';
+  String get displayLanguageTitle =>
+      isRu ? 'Язык интерфейса' : 'Display Language';
   String get displayLanguageSub =>
       isRu ? 'Локализация приложения' : 'Portal localized interface';
   String get deadlineRemindersTitle =>
@@ -332,9 +336,8 @@ class S {
       : '$m min before lecture starts (offline)';
   String get autoCheckTasksTitle =>
       isRu ? 'Фоновая проверка заданий' : 'Auto-check new tasks';
-  String get autoCheckTasksSub => isRu
-      ? 'Периодическая синхронизация WorkManager'
-      : 'Background sync frequency (WorkManager)';
+  String get autoCheckTasksSub =>
+      isRu ? 'Автоматическая проверка в фоне' : 'Automatic background checks';
   String get refreshAllNow =>
       isRu ? 'Обновить все данные сейчас' : 'Refresh all data now';
   String get dataPrivacySection =>
@@ -342,15 +345,15 @@ class S {
   String get clearOfflineCacheTitle =>
       isRu ? 'Очистить офлайн-кэш' : 'Clear offline cache';
   String offlineCacheSub(String sizeText) => isRu
-      ? '$sizeText скачанных файлов и кэш SQLite'
-      : '$sizeText of downloaded files & SQLite cache';
+      ? '$sizeText скачанных файлов и сохранённых данных'
+      : '$sizeText of downloaded files & saved data';
   String get logoutPortal =>
       isRu ? 'Выйти из аккаунта' : 'Log out of Inha Portal';
   String get appVersionFooter =>
       'Inha App v${UpdateService.currentVersion} • Tashkent Campus';
   String get localStorageFooter => isRu
-      ? 'Локальное хранилище SQLite • Прямое подключение к eClass & INS'
-      : 'Local SQLite Storage • Direct eClass & INS Client';
+      ? 'Хранение только на устройстве • Прямое подключение к eClass & INS'
+      : 'Stored on Your Device • Direct Connection to eClass & INS';
 
   // Unified password & INS UX
   String get loginSamePasswordNote => isRu
@@ -361,8 +364,7 @@ class S {
       : 'INS returned no grade records yet.';
   String get insOverridePasswordBtn =>
       isRu ? 'Указать другой пароль INS' : 'Use custom INS password';
-  String get insAutoPasswordBadge =>
-      isRu ? 'Авто (eClass)' : 'Auto (eClass)';
+  String get insAutoPasswordBadge => isRu ? 'Авто (eClass)' : 'Auto (eClass)';
   String get insOverrideBadge => isRu ? 'Свой пароль' : 'Custom';
   String get insPasswordHintOverride => isRu
       ? 'Оставьте пустым, чтобы использовать пароль eClass'
@@ -372,14 +374,11 @@ class S {
   // Course Detail — Stitch Assignments / Grades / Files
   String get assignmentsProgressTitle =>
       isRu ? 'Прогресс по заданиям' : 'Assignment Completion';
-  String completedOfTotal(int done, int total) => isRu
-      ? '$done из $total выполнено'
-      : '$done of $total completed';
-  String get hideCompletedLabel =>
-      isRu ? 'Скрыть сданные' : 'Hide completed';
+  String completedOfTotal(int done, int total) =>
+      isRu ? '$done из $total выполнено' : '$done of $total completed';
+  String get hideCompletedLabel => isRu ? 'Скрыть сданные' : 'Hide completed';
 
-  String get currentStandingLabel =>
-      isRu ? 'ТЕКУЩИЙ ИТОГ' : 'CURRENT STANDING';
+  String get currentStandingLabel => isRu ? 'ТЕКУЩИЙ ИТОГ' : 'CURRENT STANDING';
   String get courseTotalLabel => isRu ? 'Итог по курсу' : 'Course Total';
   String get syllabusWeightsTitle =>
       isRu ? 'Разбивка по весам' : 'Syllabus Weight Breakdown';
@@ -406,18 +405,15 @@ class S {
       isRu ? 'Скачать все ($n)' : 'Download all ($n)';
   String downloadingAllProgress(int done, int total) =>
       isRu ? 'Скачивание $done/$total...' : 'Downloading $done/$total...';
-  String get downloadedLocallyBadge =>
-      isRu ? 'На устройстве' : 'Saved offline';
+  String get downloadedLocallyBadge => isRu ? 'На устройстве' : 'Saved offline';
 
   // Assignment Detail (Stitch #12)
-  String get assignmentDetailTitle =>
-      isRu ? 'О задании' : 'Assignment Detail';
-  String get problemStatement =>
-      isRu ? 'Условие задания' : 'Problem Statement';
-  String get noDescriptionProvided =>
-      isRu ? 'Текстовое описание не указано в eClass.' : 'No description provided in eClass.';
-  String get attachedFiles =>
-      isRu ? 'Прикреплённые файлы' : 'Attached Files';
+  String get assignmentDetailTitle => isRu ? 'О задании' : 'Assignment Detail';
+  String get problemStatement => isRu ? 'Условие задания' : 'Problem Statement';
+  String get noDescriptionProvided => isRu
+      ? 'Текстовое описание не указано в eClass.'
+      : 'No description provided in eClass.';
+  String get attachedFiles => isRu ? 'Прикреплённые файлы' : 'Attached Files';
   String get submissionPortal =>
       isRu ? 'Отправка решения' : 'Submission Portal';
   String get submittedFilesLabel =>
@@ -427,23 +423,24 @@ class S {
   String get pickFileToUpload =>
       isRu ? 'Выбрать файл с устройства' : 'Choose solution file';
   String get changeFile => isRu ? 'Заменить файл' : 'Replace file';
-  String get honorCodeLabel =>
-      isRu ? 'Подтвердить отправку на проверку' : 'Submit for grading (Honor Code)';
+  String get honorCodeLabel => isRu
+      ? 'Подтвердить отправку на проверку'
+      : 'Submit for grading (Honor Code)';
   String get honorCodeSub => isRu
       ? 'Подтверждает финальную отправку работы вместо черновика'
       : 'Finalizes submission instead of keeping a draft';
-  String maxPointsLabel(String pts) =>
-      isRu ? 'Макс. $pts б.' : '$pts Pts Max';
+  String maxPointsLabel(String pts) => isRu ? 'Макс. $pts б.' : '$pts Pts Max';
   String dueInCountdown(int d, int h, int m) {
     if (d > 0) return isRu ? 'Осталось $dд $hч' : '${d}d ${h}h remaining';
     if (h > 0) return isRu ? 'Осталось $hч $mм' : '${h}h ${m}m remaining';
     return isRu ? 'Осталось $m мин' : '$m min remaining';
   }
 
-  String get noDeadlineSet => isRu ? 'Без жёсткого дедлайна' : 'No deadline set';
+  String get noDeadlineSet =>
+      isRu ? 'Без жёсткого дедлайна' : 'No deadline set';
   String get uploadOnlyInWebHint => isRu
-      ? 'Отправка файлов через API недоступна — откройте задание в eClass.'
-      : 'API file upload unavailable for this task — open in eClass.';
+      ? 'Отправка файлов для этого задания доступна только на сайте eClass.'
+      : 'File upload for this task is available on the eClass website.';
 
   // Hide / Dismiss Deadlines & Assignment Details
   String get hideDeadline => isRu ? 'Скрыть задание' : 'Hide assignment';
@@ -517,19 +514,16 @@ class S {
   String get grantPermissionBtn => isRu ? 'Разрешить' : 'Allow';
   String scheduledAlertsCount(int total) =>
       isRu ? '$total в очереди' : '$total scheduled';
-  String classAlertsCount(int n) =>
-      isRu ? 'Пары: $n' : 'Classes: $n';
-  String deadlineAlertsCount(int n) =>
-      isRu ? 'Дедлайны: $n' : 'Deadlines: $n';
+  String classAlertsCount(int n) => isRu ? 'Пары: $n' : 'Classes: $n';
+  String deadlineAlertsCount(int n) => isRu ? 'Дедлайны: $n' : 'Deadlines: $n';
   String get classesMetricLabel => isRu ? 'Пары' : 'Classes';
   String get deadlinesMetricLabel => isRu ? 'Дедлайны' : 'Deadlines';
   String get scheduledMetricLabel => isRu ? 'В очереди' : 'Scheduled';
   String get sendInstantTestBtn =>
       isRu ? 'Мгновенный тест' : 'Send Instant Test';
   String get schedule10sTestBtn => isRu ? 'Тест через 10с' : 'Test in 10s';
-  String get instantTestSentToast => isRu
-      ? 'Тестовое уведомление отправлено!'
-      : 'Test notification sent!';
+  String get instantTestSentToast =>
+      isRu ? 'Тестовое уведомление отправлено!' : 'Test notification sent!';
   String get delayedTestScheduledToast => isRu
       ? 'Уведомление придёт через 10с — можно свернуть приложение'
       : 'Notification scheduled in 10s — try minimizing the app';
@@ -583,16 +577,15 @@ class S {
       isRu ? 'Оценка за оставшийся итог' : 'Remaining Exam / Work Score';
   String get customCourseHint => isRu ? 'Новый предмет' : 'New Course';
   String crShort(int cr) => isRu ? '$cr кр.' : '$cr cr';
-  String get draftStatus => isRu ? 'Черновик (не отправлен)' : 'Draft (not submitted)';
+  String get draftStatus =>
+      isRu ? 'Черновик (не отправлен)' : 'Draft (not submitted)';
   String get courseGradeSliderLabel =>
       isRu ? 'Предполагаемая оценка' : 'Course Grade';
   String get autoModeBadge => isRu ? 'Авто' : 'Auto';
   String get manualModeBadge => isRu ? 'Вручную' : 'Manual';
-  String get resetToAutoHint =>
-      isRu ? 'Сбросить в авто' : 'Reset to auto';
+  String get resetToAutoHint => isRu ? 'Сбросить в авто' : 'Reset to auto';
   String get fromEclassBadge => 'eClass';
-  String get overallCoursePctLabel =>
-      isRu ? 'Итог по курсу' : 'Course Overall';
+  String get overallCoursePctLabel => isRu ? 'Итог по курсу' : 'Course Overall';
   String get upcomingScheduledLabel =>
       isRu ? 'БЛИЖАЙШИЕ ЗАПЛАНИРОВАННЫЕ' : 'NEXT SCHEDULED ALERTS';
   String get noScheduledAlerts => isRu
@@ -604,13 +597,13 @@ class S {
       ? const [
           'Начало пар (офлайн): за выбранное число минут до каждой пары недели.',
           'Дедлайны (офлайн): за 24 часа и за 2 часа до сдачи (кроме скрытых).',
-          'Новые задания в фоне (WorkManager): периодическая проверка eClass API.',
+          'Новые задания в фоне: автоматическая проверка новых публикаций в eClass.',
           'Новые оценки: при обновлении оценок в eClass или портале INS.',
         ]
       : const [
           'Class Reminders (offline): weekly alerts before each group lecture.',
           'Assignment Deadlines (offline): 24h & 2h before due date (excludes hidden).',
-          'Background New Tasks (WorkManager): periodic eClass API checks.',
+          'Background New Tasks: automatic checks for newly posted eClass tasks.',
           'Grade Updates: when new grades appear on eClass or INS sync.',
         ];
 
@@ -623,23 +616,23 @@ class S {
       : 'Current version v$ver • GitHub Releases';
   String get updateAvailableTitle =>
       isRu ? 'Доступно обновление' : 'Update Available';
-  String updateAvailableBadge(String ver) =>
-      isRu ? 'Новая v$ver' : 'New v$ver';
+  String updateAvailableBadge(String ver) => isRu ? 'Новая v$ver' : 'New v$ver';
   String get whatsNewLabel => isRu ? 'Что нового' : "What's New";
   String get downloadAndInstallBtn =>
       isRu ? 'Скачать и установить' : 'Download & Install';
   String downloadingUpdatePct(int pct) =>
       isRu ? 'Скачивание... $pct%' : 'Downloading... $pct%';
-  String get openOnGithubBtn =>
-      isRu ? 'Открыть на GitHub' : 'Open on GitHub';
+  String get openOnGithubBtn => isRu ? 'Открыть на GitHub' : 'Open on GitHub';
+  String get githubRepoTitle =>
+      isRu ? 'Исходный код на GitHub' : 'Source Code on GitHub';
+  String get githubRepoSub => 'github.com/crewles/inha-app • Open Source';
   String get upToDateToast =>
       isRu ? 'Установлена последняя версия' : 'You are on the latest version';
   String get updateRepoPrivateToast => isRu
       ? 'Репозиторий пока приватный или релизов ещё нет'
       : 'Repository has no public releases yet';
-  String get updateCheckFailedToast => isRu
-      ? 'Не удалось проверить обновления'
-      : 'Failed to check for updates';
+  String get updateCheckFailedToast =>
+      isRu ? 'Не удалось проверить обновления' : 'Failed to check for updates';
   String get installPermissionPrompt => isRu
       ? 'Разрешите установку из этого источника и нажмите снова'
       : 'Allow app installs from this source and tap Install again';
@@ -648,10 +641,9 @@ class S {
   String get homeWidgetsTitle =>
       isRu ? 'Виджеты рабочего стола' : 'Home Screen Widgets';
   String get homeWidgetsSub => isRu
-      ? '4 виджета с живыми данными без открытия приложения'
-      : '4 Material You widgets synced from local SQLite';
-  String get widgetGalleryTitle =>
-      isRu ? 'Галерея виджетов' : 'Widget Gallery';
+      ? '4 виджета с актуальными данными без открытия приложения'
+      : '4 Material You widgets with live data at a glance';
+  String get widgetGalleryTitle => isRu ? 'Галерея виджетов' : 'Widget Gallery';
   String get widgetGallerySubtitle => isRu
       ? 'Предпросмотр с вашими текущими данными и быстрое добавление на экран Android'
       : 'Live preview with your real portal data and one-tap home screen pinning';
@@ -682,4 +674,189 @@ class S {
   String get widgetDeadlinesDesc => isRu
       ? 'Срочные несданные задания (без скрытых)'
       : 'Upcoming pending tasks (excludes hidden)';
+
+  // #7 Privacy & Security
+  String get privacyPolicyTitle =>
+      isRu ? 'Политика конфиденциальности' : 'Privacy Policy';
+  String get privacyPolicySub => isRu
+      ? 'Почему разработчики не видят ваши пароли'
+      : 'How your credentials stay private on your phone';
+  String get privacyHeroBadge =>
+      isRu ? 'ТОЛЬКО НА ВАШЕМ УСТРОЙСТВЕ' : 'ON-DEVICE ONLY';
+  String get privacyHeroTitle => isRu
+      ? 'Нулевой доступ разработчиков к вашим данным'
+      : 'Zero Developer Access to Your Data';
+  String get privacyHeroDesc => isRu
+      ? 'Разработчики никогда не видят ваш Student ID, пароли, оценки или файлы. Приложение не использует свои серверы и работает напрямую с порталами университета.'
+      : 'Developers never see your Student ID, passwords, grades, or files. There are no middleman developer servers — everything stays between your phone and Inha portals.';
+  String get privacyHeroStatus => isRu
+      ? 'Прямой обмен данными только с серверами Инха'
+      : 'Direct connection to Inha University portals';
+  String get privacySectionTitle =>
+      isRu ? 'Главные гарантии приватности' : 'Core Privacy Guarantees';
+  String get privacySectionSub => isRu
+      ? 'Как Inha App защищает ваш аккаунт и учебные данные'
+      : 'How Inha App keeps your student account strictly yours';
+  String get privacyCard1Overline =>
+      isRu ? 'УЧЁТНЫЕ ДАННЫЕ' : 'LOCAL CREDENTIALS';
+  String get privacyCard1Title =>
+      isRu ? 'Пароли не покидают ваш телефон' : '100% On-Device Credentials';
+  String get privacyCard1Desc => isRu
+      ? 'Ваш Student ID, пароли от eClass и INS, а также активная сессия входа сохраняются только в личном хранилище приложения на телефоне. Они никогда не отправляются разработчикам.'
+      : 'Your Student ID, eClass & INS passwords, and sign-in session are stored exclusively inside your phone. They are never transmitted to or logged by any developer server.';
+  String get privacyChipOnDevice =>
+      isRu ? 'Только на телефоне' : 'Stored On Phone';
+  String get privacyChipNoTracking =>
+      isRu ? 'Без аналитики и слежки' : 'Zero Tracking';
+  String get privacyChipNoServers =>
+      isRu ? 'Без серверов автора' : 'No Developer Servers';
+  String get privacyCard2Overline =>
+      isRu ? 'СЕТЕВЫЕ ПОДКЛЮЧЕНИЯ' : 'DIRECT CONNECTIONS';
+  String get privacyCard2Title =>
+      isRu ? 'Прямой доступ без посредников' : 'Direct Portal Connections';
+  String get privacyCard2Desc => isRu
+      ? 'Каждый запрос за оценками, заданиями и расписанием идёт напрямую с вашего телефона на официальные ресурсы университета — без прокси и сторонних ретрансляторов.'
+      : 'Every request for grades, assignments, and schedules goes straight from your phone to official university servers with no middleman proxy.';
+  String get privacyEndpointEclassSub => isRu
+      ? 'Курсы, задания, оценки и файлы'
+      : 'Courses, assignments, grades & files';
+  String get privacyEndpointInsSub => isRu
+      ? 'Транскрипт, GPA и семестры'
+      : 'Transcript, GPA & semester records';
+  String get privacyEndpointEdupageSub =>
+      isRu ? 'Официальное расписание пар' : 'Official lecture timetable';
+  String get privacyBadgeDirect => isRu ? 'Напрямую' : 'Direct';
+  String get privacyBadgeOfficial => isRu ? 'Официально' : 'Official';
+  String get privacyCard3Overline =>
+      isRu ? 'ХРАНЕНИЕ И ОЧИСТКА' : 'STORAGE & REMOVAL';
+  String get privacyCard3Title =>
+      isRu ? 'Мгновенное удаление при выходе' : 'Offline Access & Instant Wipe';
+  String get privacyCard3Desc => isRu
+      ? 'Расписание, оценки и скачанные файлы хранятся на телефоне, чтобы приложение мгновенно открывалось даже без интернета.'
+      : 'Your schedule, grades, and downloaded documents are saved on your phone so the app opens instantly even without internet.';
+  String get privacyLogoutWipeNote => isRu
+      ? 'Полное удаление при выходе: при нажатии «Выйти из аккаунта» все пароли, история, загруженные материалы и черновики стираются с телефона.'
+      : 'Instant wipe on sign out: tapping Log out permanently removes all saved passwords, downloaded files, and drafts from your phone.';
+  String privacyClearFilesBtn(String size) =>
+      isRu ? 'Очистить сохранённые файлы ($size)' : 'Clear Saved Files ($size)';
+  String get privacyCard4Overline => isRu ? 'ОТКРЫТЫЙ КОД' : 'OPEN SOURCE';
+  String get privacyCard4Title =>
+      isRu ? 'Полная прозрачность кода' : 'Open Source & Transparent';
+  String get privacyCard4Desc => isRu
+      ? 'Весь исходный код приложения открыт для проверки любым студентом или преподавателем. В приложении нет рекламы, скрытой телеметрии и сбора статистики.'
+      : 'Every line of code in the app is public and open for inspection by any student or faculty member. Zero ads, zero hidden analytics, zero tracking.';
+  String get privacyInspectGithubBtn =>
+      isRu ? 'Проверить код на GitHub' : 'Inspect Source on GitHub';
+  String get privacyFooterNote => isRu
+      ? 'Inha App • Независимый клиент от студентов для студентов IUT'
+      : 'Inha App • Independent student-built client for IUT';
+
+  // #8 Submission Drafts
+  String get draftsTitle => isRu ? 'Файлы и черновики' : 'Submission Drafts';
+  String get draftsSub => isRu
+      ? 'Неотправленные черновики и подготовленные файлы'
+      : 'Unsubmitted eClass drafts & prepared files';
+  String get draftsWorkspaceOverline =>
+      isRu ? 'ЧЕРНОВИКИ РАБОТ' : 'ASSIGNMENT WORKSPACE';
+  String get draftsOverviewTitle =>
+      isRu ? 'Подготовленные файлы' : 'Draft Staging Overview';
+  String get draftsOverviewDesc => isRu
+      ? 'Неотправленные попытки и личные файлы в eClass, а также файлы, подготовленные на телефоне.'
+      : 'Unsubmitted attempts, personal files saved on eClass, and files prepared on your phone.';
+  String get draftsOnEclassLabel => isRu ? 'На eClass' : 'On eClass';
+  String get draftsOnPhoneLabel => isRu ? 'На телефоне' : 'On Phone';
+  String get draftsSavedCountLabel => isRu ? 'на портале' : 'saved items';
+  String get draftsLocalCountLabel => isRu ? 'подготовлено' : 'staged locally';
+  String draftsFilterAll(int n) => isRu ? 'Все ($n)' : 'All Drafts ($n)';
+  String draftsFilterEclass(int n) => isRu ? 'eClass ($n)' : 'eClass ($n)';
+  String draftsFilterLocal(int n) =>
+      isRu ? 'На телефоне ($n)' : 'On Phone ($n)';
+  String draftsEclassSectionTitle(int n) =>
+      isRu ? 'ЧЕРНОВИКИ ЗАДАНИЙ В ECLASS ($n)' : 'ECLASS UNSUBMITTED DRAFTS ($n)';
+  String draftsPrivateFilesSectionTitle(int n) =>
+      isRu ? 'ЛИЧНЫЕ ФАЙЛЫ ECLASS ($n)' : 'ECLASS SAVED FILES ($n)';
+  String get draftsPrivateFilesSectionSub => isRu
+      ? 'Файлы из вашего личного хранилища eClass — их можно открыть или сразу прикрепить к заданию.'
+      : 'Files stored in your personal eClass area — open or attach directly to any assignment.';
+  String get draftsRootFolderLabel =>
+      isRu ? 'Мои файлы eClass' : 'eClass My Files';
+  String get draftsOpenFileBtn => isRu ? 'Открыть' : 'Open';
+  String get draftsAttachToAssignmentBtn =>
+      isRu ? 'Прикрепить к заданию' : 'Attach to Assignment';
+  String get draftsChooseActionTitle =>
+      isRu ? 'Выберите способ отправки' : 'Choose Submission Mode';
+  String get draftsReplaceFileBtn => isRu ? 'Заменить файл' : 'Replace File';
+  String get draftsSubmitForGradingBtn =>
+      isRu ? 'Отправить на проверку' : 'Submit for Grading';
+  String draftsLocalSectionTitle(int n) =>
+      isRu ? 'ФАЙЛЫ НА ТЕЛЕФОНЕ ($n)' : 'STAGED ON THIS PHONE ($n)';
+  String get draftsLocalSectionSub => isRu
+      ? 'Сохранены только на вашем телефоне и ещё не загружены в eClass.'
+      : 'Stored only on your phone and not yet uploaded to eClass.';
+  String get draftsOnDeviceBadge => isRu ? 'На телефоне' : 'On Device';
+  String get draftsUploadAsDraftBtn => isRu ? 'В черновик' : 'Upload Draft';
+  String get draftsSubmitNowBtn => isRu ? 'Сдать сейчас' : 'Submit Now';
+  String get draftsStageNewBtn =>
+      isRu ? 'Добавить локальный черновик' : 'Add Local Draft';
+  String get draftsPickAssignmentTitle =>
+      isRu ? 'Выберите задание для черновика' : 'Pick Assignment for Draft';
+  String get draftsEmptyTitle => isRu ? 'Черновиков пока нет' : 'No Drafts Yet';
+  String get draftsEmptySub => isRu
+      ? 'Когда сохраните работу как черновик на eClass или подготовите файл заранее, он появится здесь.'
+      : 'When you save a work-in-progress on eClass or prepare a file on your phone, it will appear here.';
+  String get draftStagedToast =>
+      isRu ? 'Файл сохранён в черновиках' : 'File staged in drafts';
+  String get draftRemovedToast =>
+      isRu ? 'Локальный черновик удалён' : 'Local draft removed';
+  String get draftSubmittedToast =>
+      isRu ? 'Работа отправлена!' : 'Draft submitted!';
+
+  // #9 Optional Diagnostics & Logs
+  String get logsTitle => isRu ? 'Диагностика и логи' : 'Diagnostics & Logs';
+  String get logsSub => isRu
+      ? 'Необязательный журнал ошибок без личных данных'
+      : 'Optional error log with zero personal data';
+  String get logsOptInTitle =>
+      isRu ? 'Записывать диагностические логи' : 'Record diagnostic logs';
+  String get logsOptInSub => isRu
+      ? 'По умолчанию выключено — включайте только по желанию при проблемах'
+      : 'Off by default — turn on only if you want to troubleshoot issues';
+  String get logsPrivacyNotice => isRu
+      ? 'Личные данные не записываются: ваши пароли, Student ID, коды доступа и оценки автоматически скрываются (***). Логи хранятся только на телефоне и никуда не отправляются сами.'
+      : 'No personal data is ever recorded: your passwords, Student ID, access tokens, and grades are automatically masked (***). Logs stay on your phone and are never sent automatically.';
+  String get logsFilterAll => isRu ? 'Все' : 'All';
+  String get logsFilterErrors => isRu ? 'Ошибки' : 'Errors';
+  String get logsFilterCrashes => isRu ? 'Сбои' : 'Crashes';
+  String get logsCopyBtn => isRu ? 'Скопировать логи' : 'Copy Logs';
+  String get logsCopiedToast =>
+      isRu ? 'Логи скопированы в буфер обмена' : 'Logs copied to clipboard';
+  String get logsClearBtn => isRu ? 'Очистить' : 'Clear';
+  String get logsClearedToast => isRu ? 'Логи очищены' : 'Logs cleared';
+  String get logsEmptyTitle => isRu ? 'Записей пока нет' : 'No Log Entries Yet';
+  String get logsEmptySub => isRu
+      ? 'Запись диагностических логов отключена или сбоев ещё не возникало.'
+      : 'Diagnostic logging is off or no events have been recorded yet.';
+  String get logsStatusOn => isRu ? 'Вкл' : 'ON';
+  String get logsStatusOff => isRu ? 'Выкл' : 'OFF';
+
+  String get crashBannerTitle =>
+      isRu ? 'Обнаружен сбой в приложении' : 'Unexpected App Error Detected';
+  String get crashBannerDesc => isRu
+      ? 'Рекомендуем включить логи и скопировать отчёт об ошибке, чтобы мы могли быстро её исправить. Пароли и личные данные в отчёт не попадают.'
+      : 'We strongly recommend enabling logs and copying the crash report so it can be fixed quickly. Passwords and personal data are never included.';
+  String get crashBannerEnableBtn =>
+      isRu ? 'Включить логи и открыть отчёт' : 'Enable Logs & Open Report';
+  String get crashBannerViewOnlyBtn =>
+      isRu ? 'Открыть без включения' : 'View Report Only';
+  String get crashBannerDismissBtn => isRu ? 'Не сейчас' : 'Not Now';
+
+  String get privacyCardLogsOverline =>
+      isRu ? 'ДИАГНОСТИКА ПО ЖЕЛАНИЮ' : 'OPTIONAL DIAGNOSTICS';
+  String get privacyCardLogsTitle =>
+      isRu ? 'Логи без личных данных' : 'Optional Logs with Zero Personal Data';
+  String get privacyCardLogsDesc => isRu
+      ? 'Запись диагностических логов по умолчанию выключена и работает только по вашему желанию (или предлагается после сбоя). В логах никогда не сохраняются пароли, Student ID, оценки или личные данные — они автоматически вырезаются.'
+      : 'Diagnostic logging is turned off by default and is completely optional (only suggested if an error occurs). Logs never collect passwords, Student ID, grades, or personal information — any sensitive fields are automatically stripped.';
+  String get privacyOpenLogsBtn =>
+      isRu ? 'Настроить диагностические логи' : 'Configure Diagnostic Logs';
 }

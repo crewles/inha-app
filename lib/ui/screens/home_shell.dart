@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../services/app_logger.dart';
 import '../../state/app_state.dart';
 import '../widgets/app_haptics.dart';
 import 'assignments_screen.dart';
 import 'courses_screen.dart';
 import 'ins_screen.dart';
+import 'logs_screen.dart';
 import 'settings_screen.dart';
 import 'timetable_screen.dart';
 
@@ -25,10 +27,167 @@ class HomeShell extends StatelessWidget {
     final app = context.watch<AppState>();
     final s = app.s;
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
     final index = app.activeTabIndex.clamp(0, _pages.length - 1);
 
     return Scaffold(
-      body: IndexedStack(index: index, children: _pages),
+      body: AnimatedBuilder(
+        animation: AppLogger.instance,
+        builder: (context, _) {
+          final showCrashBanner = AppLogger.instance.hasPendingCrashPrompt;
+          return Column(
+            children: [
+              if (showCrashBanner)
+                SafeArea(
+                  bottom: false,
+                  child: Container(
+                    key: const ValueKey('crash_prompt_banner'),
+                    margin: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: cs.errorContainer,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.report_problem_rounded,
+                              color: cs.onErrorContainer,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    s.crashBannerTitle,
+                                    style: tt.titleSmall?.copyWith(
+                                      color: cs.onErrorContainer,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    s.crashBannerDesc,
+                                    style: tt.bodySmall?.copyWith(
+                                      color: cs.onErrorContainer
+                                          .withValues(alpha: 0.9),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            FilledButton.icon(
+                              key: const ValueKey('crash_enable_logs_btn'),
+                              onPressed: () async {
+                                AppHaptics.medium();
+                                await app.updateSettings(
+                                  app.settings
+                                      .copyWith(diagnosticsEnabled: true),
+                                );
+                                await AppLogger.instance.dismissCrashPrompt();
+                                if (context.mounted) {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const LogsScreen(),
+                                    ),
+                                  );
+                                }
+                              },
+                              style: FilledButton.styleFrom(
+                                backgroundColor: cs.error,
+                                foregroundColor: cs.onError,
+                                shape: const StadiumBorder(),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                minimumSize: const Size(0, 36),
+                              ),
+                              icon: const Icon(Icons.bug_report_rounded,
+                                  size: 16),
+                              label: Text(
+                                s.crashBannerEnableBtn,
+                                style: tt.labelMedium?.copyWith(
+                                  color: cs.onError,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            OutlinedButton(
+                              onPressed: () async {
+                                AppHaptics.selection();
+                                await AppLogger.instance.dismissCrashPrompt();
+                                if (context.mounted) {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const LogsScreen(),
+                                    ),
+                                  );
+                                }
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: cs.onErrorContainer,
+                                side: BorderSide(
+                                  color: cs.onErrorContainer
+                                      .withValues(alpha: 0.4),
+                                ),
+                                shape: const StadiumBorder(),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                minimumSize: const Size(0, 36),
+                              ),
+                              child: Text(
+                                s.crashBannerViewOnlyBtn,
+                                style: tt.labelMedium?.copyWith(
+                                  color: cs.onErrorContainer,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              key: const ValueKey('crash_dismiss_btn'),
+                              onPressed: () {
+                                AppHaptics.light();
+                                AppLogger.instance.dismissCrashPrompt();
+                              },
+                              style: TextButton.styleFrom(
+                                foregroundColor: cs.onErrorContainer,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                                minimumSize: const Size(0, 36),
+                              ),
+                              child: Text(
+                                s.crashBannerDismissBtn,
+                                style: tt.labelMedium?.copyWith(
+                                  color: cs.onErrorContainer,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: IndexedStack(index: index, children: _pages),
+              ),
+            ],
+          );
+        },
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           border: Border(

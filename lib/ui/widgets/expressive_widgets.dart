@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../l10n/strings.dart';
@@ -262,7 +264,10 @@ class ExpressiveSegmentedControl<T> extends StatelessWidget {
                         seg.label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelMedium
+                            ?.copyWith(
                               color:
                                   isSelected ? activeFg : cs.onSurfaceVariant,
                               fontWeight: isSelected
@@ -589,6 +594,7 @@ class HeroGradientCard extends StatelessWidget {
 
 class InitialsAvatar extends StatelessWidget {
   final String name;
+  final String? imagePath;
   final double size;
   final Color? backgroundColor;
   final Color? foregroundColor;
@@ -597,6 +603,7 @@ class InitialsAvatar extends StatelessWidget {
   const InitialsAvatar({
     super.key,
     required this.name,
+    this.imagePath,
     this.size = 44,
     this.backgroundColor,
     this.foregroundColor,
@@ -606,7 +613,8 @@ class InitialsAvatar extends StatelessWidget {
   String get _initials {
     final cleaned = name.trim();
     if (cleaned.isEmpty) return '';
-    final parts = cleaned.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts =
+        cleaned.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
     if (parts.length >= 2) {
       return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
     }
@@ -620,6 +628,23 @@ class InitialsAvatar extends StatelessWidget {
     final fg = foregroundColor ?? cs.onPrimaryFixed;
     final initials = _initials;
 
+    final fallback = Center(
+      child: initials.isEmpty
+          ? Icon(Icons.person_rounded, size: size * 0.55, color: fg)
+          : Text(
+              initials,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: fg,
+                    fontWeight: FontWeight.w800,
+                    fontSize: size * 0.36,
+                  ),
+            ),
+    );
+
+    final hasFile = imagePath != null &&
+        imagePath!.isNotEmpty &&
+        File(imagePath!).existsSync();
+
     final circle = Container(
       width: size,
       height: size,
@@ -627,18 +652,17 @@ class InitialsAvatar extends StatelessWidget {
         color: bg,
         shape: BoxShape.circle,
       ),
-      child: Center(
-        child: initials.isEmpty
-            ? Icon(Icons.person_rounded, size: size * 0.55, color: fg)
-            : Text(
-                initials,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: fg,
-                      fontWeight: FontWeight.w800,
-                      fontSize: size * 0.36,
-                    ),
+      child: hasFile
+          ? ClipOval(
+              child: Image.file(
+                File(imagePath!),
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => fallback,
               ),
-      ),
+            )
+          : fallback,
     );
 
     if (!showVerifiedBadge) return circle;
@@ -676,7 +700,9 @@ String formatFileSize(int bytes) {
 IconData iconForFileName(String name) {
   final lower = name.toLowerCase();
   if (lower.endsWith('.pdf')) return Icons.picture_as_pdf_rounded;
-  if (lower.endsWith('.zip') || lower.endsWith('.rar') || lower.endsWith('.7z')) {
+  if (lower.endsWith('.zip') ||
+      lower.endsWith('.rar') ||
+      lower.endsWith('.7z')) {
     return Icons.folder_zip_rounded;
   }
   if (lower.endsWith('.ppt') || lower.endsWith('.pptx')) {
@@ -685,7 +711,9 @@ IconData iconForFileName(String name) {
   if (lower.endsWith('.doc') || lower.endsWith('.docx')) {
     return Icons.description_rounded;
   }
-  if (lower.endsWith('.xls') || lower.endsWith('.xlsx') || lower.endsWith('.csv')) {
+  if (lower.endsWith('.xls') ||
+      lower.endsWith('.xlsx') ||
+      lower.endsWith('.csv')) {
     return Icons.table_chart_rounded;
   }
   if (lower.endsWith('.cpp') ||
@@ -709,7 +737,9 @@ IconData iconForFileName(String name) {
 Color colorForFileName(String name, ColorScheme cs) {
   final lower = name.toLowerCase();
   if (lower.endsWith('.pdf')) return cs.error;
-  if (lower.endsWith('.zip') || lower.endsWith('.rar') || lower.endsWith('.7z')) {
+  if (lower.endsWith('.zip') ||
+      lower.endsWith('.rar') ||
+      lower.endsWith('.7z')) {
     return cs.primary;
   }
   if (lower.endsWith('.ppt') || lower.endsWith('.pptx')) return cs.tertiary;
@@ -718,8 +748,8 @@ Color colorForFileName(String name, ColorScheme cs) {
 
 String formatRelativeTime(int epochMs, S s) {
   if (epochMs <= 0) return '';
-  final diff = DateTime.now()
-      .difference(DateTime.fromMillisecondsSinceEpoch(epochMs));
+  final diff =
+      DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(epochMs));
   if (diff.inMinutes < 1) return s.justNow;
   if (diff.inHours < 1) return s.minutesAgo(diff.inMinutes);
   if (diff.inDays < 1) return s.hoursAgo(diff.inHours);
@@ -756,10 +786,8 @@ String formatPersonName(String raw) {
   }
 
   return collapsed.split(' ').map((word) {
-    final isAllUpper =
-        word == word.toUpperCase() && word != word.toLowerCase();
-    final isAllLower =
-        word == word.toLowerCase() && word != word.toUpperCase();
+    final isAllUpper = word == word.toUpperCase() && word != word.toLowerCase();
+    final isAllLower = word == word.toLowerCase() && word != word.toUpperCase();
     if (!isAllUpper && !isAllLower) return word;
     return word.split('-').map(titleSegment).join('-');
   }).join(' ');
