@@ -149,7 +149,9 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
+          ls -lh release-assets
           TAG="${{ needs.resolve-version.outputs.tag }}"
           APK="release-assets/inha-app-${TAG}-arm64.apk"
           IPA="release-assets/inha-app-${TAG}-ios-unsigned.ipa"
@@ -157,7 +159,7 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$APK" "$IPA" --clobber
           else
-            ARGS=("$TAG" "$APK" "$IPA" "--title" "Inha App $TAG (Android & iOS)" "--generate-notes")
+            ARGS=("$TAG" "$APK" "$IPA" "--target" "${{ github.sha }}" "--title" "Inha App $TAG (Android & iOS)" "--generate-notes")
             if [ "$IS_PRERELEASE" = "true" ]; then
               ARGS+=("--prerelease")
             fi
