@@ -7,7 +7,7 @@
 **Нативный мобильный клиент для студентов Inha University in Tashkent (IUT)**  
 `eClass` • `INS Portal` • `EduPage Timetable` • `Material 3 Expressive` • `Offline-First SQLite`
 
-[![Version](https://img.shields.io/badge/version-1.2.2-1D4ED8?style=for-the-badge)](https://github.com/crewles/inha-app/releases)
+[![Version](https://img.shields.io/badge/version-1.2.3-1D4ED8?style=for-the-badge)](https://github.com/crewles/inha-app/releases)
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
 [![Android](https://img.shields.io/badge/Android-7.0%2B%20(arm64)-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/crewles/inha-app/releases/latest)
 [![iOS](https://img.shields.io/badge/iOS-13.0%2B%20(IPA)-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/crewles/inha-app/releases/latest)
