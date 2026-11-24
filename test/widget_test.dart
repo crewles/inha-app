@@ -345,6 +345,16 @@ class FakeAppState extends AppState {
   Future<int> getDownloadsCacheBytes() async => downloadsBytes;
 
   @override
+  Future<void> resetCustomAvatar() async {
+    hasCustomAvatar = false;
+    profileAvatarPath = null;
+    notifyListeners();
+  }
+
+  @override
+  Future<String?> uploadProfilePhotoToEclass(String sourcePath) async => null;
+
+  @override
   Future<void> clearCache() async {
     downloadsBytes = 0;
     courses = [];
@@ -1116,10 +1126,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Next Lecture Glance'), findsOneWidget);
+    expect(find.byKey(const ValueKey('widget_theme_toggle')), findsOneWidget);
     expect(
         find.byKey(const ValueKey('pin_widget_next_lecture')), findsOneWidget);
     expect(
         find.byKey(const ValueKey('pin_widget_ins_academic')), findsOneWidget);
+    await tester.tap(find.text('Dark Theme'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Light Theme'));
+    await tester.pumpAndSettle();
 
     await tester.pumpWidget(_wrap(app, const SettingsScreen()));
     await tester.pumpAndSettle();
@@ -1774,5 +1789,69 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('auto_group_confirm_banner')), findsNothing);
     expect(app.settings.timetableGroupAutoDetected, isFalse);
+  });
+
+  testWidgets('SettingsScreen opens custom avatar picker & reset sheet',
+      (tester) async {
+    final app = FakeAppState();
+    await tester.pumpWidget(_wrap(app, const SettingsScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('profile_avatar_tap')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('profile_avatar_tap')));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.byKey(const ValueKey('avatar_choose_gallery_btn')), findsOneWidget);
+    expect(find.byKey(const ValueKey('avatar_upload_eclass_switch')),
+        findsOneWidget);
+    final switchWidget = tester.widget<SwitchListTile>(
+        find.byKey(const ValueKey('avatar_upload_eclass_switch')));
+    expect(switchWidget.value, isFalse);
+    expect(find.byKey(const ValueKey('avatar_reset_btn')), findsNothing);
+
+    Navigator.of(
+            tester.element(find.byKey(const ValueKey('avatar_choose_gallery_btn'))))
+        .pop();
+    await tester.pumpAndSettle();
+
+    app.hasCustomAvatar = true;
+    await tester.tap(find.byKey(const ValueKey('profile_avatar_tap')));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.byKey(const ValueKey('avatar_choose_gallery_btn')), findsOneWidget);
+    expect(find.byKey(const ValueKey('avatar_reset_btn')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('avatar_reset_btn')));
+    await tester.pumpAndSettle();
+    expect(app.hasCustomAvatar, isFalse);
+  });
+
+  test('EclassService.parseProfileEditFormFields preserves values without deletepicture', () {
+    const html = '''
+      <form action="https://eclass.inha.ac.kr/user/user_edit.php" class="mform">
+        <input type="hidden" name="id" value="3926" />
+        <input type="hidden" name="sesskey" value="abc123" />
+        <input type="text" name="firstname" value="ARTEM" />
+        <input type="email" name="email" value="a@inha.uz" />
+        <select name="lang">
+          <option value="ko">Korean</option>
+          <option value="en" selected="selected">English</option>
+        </select>
+        <input type="checkbox" name="deletepicture" value="1" />
+        <input type="hidden" name="imagefile" value="99564040" />
+        <input type="submit" name="submitbutton" value="Update profile" />
+      </form>
+    ''';
+
+    final fields = EclassService.parseProfileEditFormFields(html);
+    expect(fields['id'], '3926');
+    expect(fields['sesskey'], 'abc123');
+    expect(fields['firstname'], 'ARTEM');
+    expect(fields['email'], 'a@inha.uz');
+    expect(fields['lang'], 'en');
+    expect(fields.containsKey('deletepicture'), isFalse);
+    expect(fields.containsKey('submitbutton'), isFalse);
   });
 }

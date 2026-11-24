@@ -3,99 +3,176 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <RelativeLayout
+    <LinearLayout
         android:id="@+id/widget_root"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_vertical"
+        android:layout_height="match_parent"
         android:background="@drawable/widget_bg_hero"
-        android:clipToOutline="true">
+        android:orientation="vertical"
+        android:padding="16dp">
 
-        <ImageView
-            android:layout_width="136dp"
-            android:layout_height="136dp"
-            android:layout_alignParentTop="true"
-            android:layout_alignParentEnd="true"
-            android:layout_marginTop="-28dp"
-            android:layout_marginEnd="-28dp"
-            android:contentDescription="@null"
-            android:src="@drawable/widget_hero_circle" />
-
-        <ImageView
-            android:layout_width="112dp"
-            android:layout_height="112dp"
-            android:layout_alignParentStart="true"
-            android:layout_alignParentBottom="true"
-            android:layout_marginStart="-24dp"
-            android:layout_marginBottom="-34dp"
-            android:contentDescription="@null"
-            android:src="@drawable/widget_hero_circle" />
-
+        <!-- Top Row: Frosted Status Pill + Time Range -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:background="@drawable/widget_pill_white_translucent"
                 android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:paddingStart="10dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="11dp"
+                android:paddingBottom="4dp">
+
+                <ImageView
+                    android:layout_width="13dp"
+                    android:layout_height="13dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_widget_clock" />
 
                 <TextView
                     android:id="@+id/tv_badge"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/widget_pill_white_translucent"
+                    android:layout_marginStart="5dp"
                     android:ellipsize="end"
+                    android:includeFontPadding="false"
                     android:maxLines="1"
-                    android:paddingStart="11dp"
-                    android:paddingTop="4dp"
-                    android:paddingEnd="11dp"
-                    android:paddingBottom="4dp"
-                    android:text="Mon"
+                    android:text="in 25 min"
                     android:textColor="#FFFFFF"
                     android:textSize="11sp"
                     android:textStyle="bold" />
+            </LinearLayout>
 
-                <FrameLayout
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1" />
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tv_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="10:00 – 11:30"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="1dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Center: Overline + Subject Title -->
+        <TextView
+            android:id="@+id/tv_overline"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:includeFontPadding="false"
+            android:letterSpacing="0.08"
+            android:maxLines="1"
+            android:text="NEXT LECTURE"
+            android:textColor="#BFE8F0FF"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_subject"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="Data Structures &amp; Algorithms"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <FrameLayout
+            android:layout_width="1dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Bottom Row: Room Pill + Teacher + Group Pill -->
+        <LinearLayout
+            android:id="@+id/bottom_meta_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:id="@+id/room_pill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/widget_pill_white_translucent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="8dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="9dp"
+                android:paddingBottom="4dp">
+
+                <ImageView
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_widget_room" />
 
                 <TextView
-                    android:id="@+id/tv_time"
+                    android:id="@+id/tv_room"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="09:30–11:00"
+                    android:layout_marginStart="4dp"
+                    android:ellipsize="end"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:text="B-201"
                     android:textColor="#FFFFFF"
-                    android:textSize="13sp"
+                    android:textSize="11sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
             <TextView
-                android:id="@+id/tv_subject"
-                android:layout_width="match_parent"
+                android:id="@+id/tv_teacher"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
                 android:ellipsize="end"
+                android:includeFontPadding="false"
                 android:maxLines="1"
-                android:text="Linear Algebra"
-                android:textColor="#FFFFFF"
-                android:textSize="17sp"
-                android:textStyle="bold" />
+                android:text="Prof. Kim Dong-Hyun"
+                android:textColor="#DCE6FF"
+                android:textSize="11.5sp" />
 
             <TextView
-                android:id="@+id/tv_meta"
-                android:layout_width="match_parent"
+                android:id="@+id/tv_group_pill"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:background="@drawable/widget_pill_white_translucent"
                 android:ellipsize="end"
+                android:includeFontPadding="false"
                 android:maxLines="1"
-                android:text="A203 • Prof. Kim"
-                android:textColor="#D9E2F5"
-                android:textSize="12sp" />
+                android:paddingStart="9dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="9dp"
+                android:paddingBottom="4dp"
+                android:text="SOCIE 22-01"
+                android:textColor="#EEF4FF"
+                android:textSize="10.5sp"
+                android:textStyle="bold" />
         </LinearLayout>
-    </RelativeLayout>
+    </LinearLayout>
 </FrameLayout>

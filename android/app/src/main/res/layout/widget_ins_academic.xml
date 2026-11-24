@@ -6,25 +6,72 @@
     <LinearLayout
         android:id="@+id/widget_root"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_vertical"
+        android:layout_height="match_parent"
         android:background="@drawable/widget_bg_card"
         android:orientation="vertical"
         android:padding="14dp">
 
-        <TextView
-            android:id="@+id/tv_overline"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="INS GPA"
-            android:textColor="@color/widget_primary"
-            android:textSize="11sp"
-            android:textStyle="bold" />
-
+        <!-- Top Row: Cap Squircle + INS GPA + Course Count Pill -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <FrameLayout
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:background="@drawable/widget_icon_squircle">
+
+                <ImageView
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_widget_school" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/tv_overline"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="7dp"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="INS GPA"
+                android:textColor="@color/widget_text_muted"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_courses"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/widget_pill_primary"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:paddingStart="8dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="4dp"
+                android:text="7 courses"
+                android:textColor="@color/widget_pill_primary_fg"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="1dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Center Hero GPA -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:gravity="bottom"
             android:orientation="horizontal">
 
@@ -32,46 +79,71 @@
                 android:id="@+id/tv_gpa"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:maxLines="1"
                 android:text="3.96"
-                android:textColor="@color/widget_text"
-                android:textSize="26sp"
+                android:textColor="@color/widget_primary"
+                android:textSize="32sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/tv_scale"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="3dp"
-                android:layout_marginBottom="3dp"
+                android:layout_marginStart="4dp"
+                android:layout_marginBottom="4dp"
+                android:includeFontPadding="false"
+                android:maxLines="1"
                 android:text="/ 4.5"
                 android:textColor="@color/widget_text_muted"
-                android:textSize="12sp" />
+                android:textSize="13sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/tv_credits"
+        <FrameLayout
+            android:layout_width="1dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Bottom Footer: Credits + Rounded Progress Bar -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="Credits: 53/53"
-            android:textColor="@color/widget_text_muted"
-            android:textSize="11sp" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/tv_courses"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/widget_pill_primary"
-            android:paddingStart="9dp"
-            android:paddingTop="3dp"
-            android:paddingEnd="9dp"
-            android:paddingBottom="3dp"
-            android:text="7 Active"
-            android:textColor="@color/widget_on_primary_fixed"
-            android:textSize="10sp"
-            android:textStyle="bold" />
+            <TextView
+                android:id="@+id/tv_credits_label"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="Credits"
+                android:textColor="@color/widget_text_muted"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/tv_credits_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="96 / 96"
+                android:textColor="@color/widget_text"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/pb_gpa"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="6dp"
+            android:layout_marginTop="6dp"
+            android:max="450"
+            android:progress="396"
+            android:progressDrawable="@drawable/widget_progress_bar" />
     </LinearLayout>
 </FrameLayout>

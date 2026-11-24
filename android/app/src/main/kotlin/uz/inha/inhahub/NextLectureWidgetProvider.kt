@@ -4,6 +4,7 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
+import android.view.View
 import android.widget.RemoteViews
 
 class NextLectureWidgetProvider : AppWidgetProvider() {
@@ -36,13 +37,18 @@ class NextLectureWidgetProvider : AppWidgetProvider() {
                 WidgetDbHelper.createOpenTabIntent(context, 2, 101)
             )
 
+            views.setTextViewText(
+                R.id.tv_overline,
+                if (snap.isRu) "СЛЕДУЮЩАЯ ПАРА" else "NEXT LECTURE"
+            )
+
             val next = snap.nextLesson
             if (next == null) {
                 views.setTextViewText(
                     R.id.tv_badge,
                     if (snap.isRu) "РАСПИСАНИЕ" else "TIMETABLE"
                 )
-                views.setTextViewText(R.id.tv_time, snap.group)
+                views.setTextViewText(R.id.tv_time, "")
                 views.setTextViewText(
                     R.id.tv_subject,
                     if (snap.group.isEmpty()) {
@@ -51,10 +57,17 @@ class NextLectureWidgetProvider : AppWidgetProvider() {
                         if (snap.isRu) "Ближайших пар нет" else "No upcoming classes"
                     }
                 )
+                views.setViewVisibility(R.id.room_pill, View.GONE)
                 views.setTextViewText(
-                    R.id.tv_meta,
+                    R.id.tv_teacher,
                     if (snap.isRu) "Нажмите, чтобы открыть" else "Tap to open schedule"
                 )
+                if (snap.group.isNotEmpty()) {
+                    views.setViewVisibility(R.id.tv_group_pill, View.VISIBLE)
+                    views.setTextViewText(R.id.tv_group_pill, snap.group)
+                } else {
+                    views.setViewVisibility(R.id.tv_group_pill, View.GONE)
+                }
                 return views
             }
 
@@ -73,13 +86,24 @@ class NextLectureWidgetProvider : AppWidgetProvider() {
             }
 
             views.setTextViewText(R.id.tv_badge, badgeText)
-            views.setTextViewText(R.id.tv_time, "${next.start}–${next.end}")
+            views.setTextViewText(R.id.tv_time, "${next.start} – ${next.end}")
             views.setTextViewText(R.id.tv_subject, next.subject)
-            val metaParts = listOf(next.room, next.teacher).filter { it.isNotEmpty() }
-            views.setTextViewText(
-                R.id.tv_meta,
-                if (metaParts.isNotEmpty()) metaParts.joinToString(" • ") else snap.group
-            )
+
+            if (next.room.isNotEmpty()) {
+                views.setViewVisibility(R.id.room_pill, View.VISIBLE)
+                views.setTextViewText(R.id.tv_room, next.room)
+            } else {
+                views.setViewVisibility(R.id.room_pill, View.GONE)
+            }
+
+            views.setTextViewText(R.id.tv_teacher, next.teacher)
+
+            if (snap.group.isNotEmpty()) {
+                views.setViewVisibility(R.id.tv_group_pill, View.VISIBLE)
+                views.setTextViewText(R.id.tv_group_pill, snap.group)
+            } else {
+                views.setViewVisibility(R.id.tv_group_pill, View.GONE)
+            }
             return views
         }
 

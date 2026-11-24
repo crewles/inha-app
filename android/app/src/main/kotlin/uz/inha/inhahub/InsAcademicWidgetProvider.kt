@@ -37,23 +37,27 @@ class InsAcademicWidgetProvider : AppWidgetProvider() {
             )
 
             views.setTextViewText(R.id.tv_overline, "INS GPA")
-            views.setTextViewText(R.id.tv_gpa, if (snap.gpa.isNotEmpty()) snap.gpa else "—")
-
-            val creditsLabel = if (snap.creditsAcquired.isNotEmpty()) {
-                val base = if (snap.isRu) "Кредиты" else "Credits"
-                if (snap.creditsAttempted.isNotEmpty()) {
-                    "$base: ${snap.creditsAcquired}/${snap.creditsAttempted}"
-                } else {
-                    "$base: ${snap.creditsAcquired}"
-                }
-            } else {
-                if (snap.isRu) "Откройте INS" else "Sync INS portal"
-            }
-            views.setTextViewText(R.id.tv_credits, creditsLabel)
             views.setTextViewText(
                 R.id.tv_courses,
-                if (snap.isRu) "${snap.activeCourseCount} активн." else "${snap.activeCourseCount} Active"
+                WidgetDbHelper.formatCoursesCount(snap.activeCourseCount, snap.isRu)
             )
+            views.setTextViewText(R.id.tv_gpa, if (snap.gpa.isNotEmpty()) snap.gpa else "—")
+
+            views.setTextViewText(
+                R.id.tv_credits_label,
+                if (snap.isRu) "Кредиты" else "Credits"
+            )
+            val creditsValue = when {
+                snap.creditsAcquired.isNotEmpty() && snap.creditsAttempted.isNotEmpty() ->
+                    "${snap.creditsAcquired}/${snap.creditsAttempted}"
+                snap.creditsAcquired.isNotEmpty() -> snap.creditsAcquired
+                else -> "—"
+            }
+            views.setTextViewText(R.id.tv_credits_value, creditsValue)
+
+            val gpaDouble = snap.gpa.replace(',', '.').toDoubleOrNull() ?: 0.0
+            val progress = (gpaDouble.coerceIn(0.0, 4.5) * 100.0).toInt()
+            views.setProgressBar(R.id.pb_gpa, 450, progress, false)
             return views
         }
     }

@@ -6,7 +6,9 @@ import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
@@ -340,6 +342,63 @@ object WidgetDbHelper {
             num.toLong().toString()
         } else {
             String.format(Locale.US, "%.1f", num)
+        }
+    }
+
+    fun formatClassesCount(count: Int, isRu: Boolean): String {
+        if (!isRu) return if (count == 1) "1 class" else "$count classes"
+        val m100 = count % 100
+        val m10 = count % 10
+        return when {
+            m100 in 11..14 -> "$count пар"
+            m10 == 1 -> "$count пара"
+            m10 in 2..4 -> "$count пары"
+            else -> "$count пар"
+        }
+    }
+
+    fun formatCoursesCount(count: Int, isRu: Boolean): String {
+        if (!isRu) return if (count == 1) "1 course" else "$count courses"
+        val m100 = count % 100
+        val m10 = count % 10
+        return when {
+            m100 in 11..14 -> "$count курсов"
+            m10 == 1 -> "$count курс"
+            m10 in 2..4 -> "$count курса"
+            else -> "$count курсов"
+        }
+    }
+
+    fun formatDueCount(count: Int, isRu: Boolean): String {
+        if (count == 0) return if (isRu) "Готово" else "Done"
+        return if (isRu) "$count активн." else "$count due"
+    }
+
+    fun formatShortDue(dueTs: Long, fallback: String, isRu: Boolean): String {
+        if (dueTs <= 0L) return fallback
+        val dueCal = Calendar.getInstance(tashkentTz).apply {
+            timeInMillis = dueTs * 1000L
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val todayCal = Calendar.getInstance(tashkentTz).apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val diffDays = ((dueCal.timeInMillis - todayCal.timeInMillis) / 86_400_000L).toInt()
+        return when {
+            diffDays == 0 -> if (isRu) "Сегодня" else "Today"
+            diffDays == 1 -> if (isRu) "Завтра" else "Tomorrow"
+            diffDays in 2..6 -> if (isRu) "${diffDays}д" else "${diffDays}d"
+            else -> {
+                val fmt = SimpleDateFormat(if (isRu) "dd.MM" else "MMM d", Locale.US)
+                fmt.timeZone = tashkentTz
+                fmt.format(Date(dueTs * 1000L))
+            }
         }
     }
 }
