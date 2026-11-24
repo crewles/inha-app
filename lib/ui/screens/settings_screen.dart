@@ -82,11 +82,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                     ),
                     const SizedBox(height: 16),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
+                    Material(
+                      color: cs.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(18),
+                      clipBehavior: Clip.antiAlias,
                       child: SwitchListTile.adaptive(
                         key: const ValueKey('avatar_upload_eclass_switch'),
                         contentPadding: const EdgeInsets.symmetric(
