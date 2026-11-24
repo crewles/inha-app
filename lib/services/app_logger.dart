@@ -246,7 +246,7 @@ class AppLogger extends ChangeNotifier {
   String buildCrashReportMarkdown({
     required String appVersion,
     String? platformOverride,
-    int maxLength = 3500,
+    int maxLength = 2600,
   }) {
     final platform = platformOverride ??
         (kIsWeb
@@ -264,8 +264,9 @@ class AppLogger extends ChangeNotifier {
     final crash = lastCrashEntry;
     if (crash != null) {
       final rawCrash = crash.formatLine();
-      final crashText = rawCrash.length > 1600
-          ? '${rawCrash.substring(0, 1597)}...'
+      final crashLimit = (maxLength - 360).clamp(400, 1400);
+      final crashText = rawCrash.length > crashLimit
+          ? '${rawCrash.substring(0, crashLimit - 3)}...'
           : rawCrash;
       buf
         ..writeln()
@@ -275,9 +276,11 @@ class AppLogger extends ChangeNotifier {
         ..writeln('```');
     }
 
-    if (_entries.isNotEmpty) {
-      final start = _entries.length > 12 ? _entries.length - 12 : 0;
-      final recent = _entries.sublist(start);
+    final recentSource =
+        _entries.where((e) => !identical(e, crash)).toList();
+    if (recentSource.isNotEmpty) {
+      final start = recentSource.length > 12 ? recentSource.length - 12 : 0;
+      final recent = recentSource.sublist(start);
       const header = '\n## Recent Logs\n```text\n';
       const footer = '```';
       if (buf.length + header.length + footer.length < maxLength) {
@@ -313,17 +316,21 @@ class AppLogger extends ChangeNotifier {
     final title = crash != null
         ? '[Crash] ${_trimSingleLine(crash.message, 72)}'
         : '[Bug] Diagnostic report (v$appVersion)';
-    final body = buildCrashReportMarkdown(
-      appVersion: appVersion,
-      platformOverride: platformOverride,
-    );
-    return Uri.parse('$repoWebUrl/issues/new').replace(
-      queryParameters: {
-        'title': title,
-        'labels': 'bug',
-        'body': body,
-      },
-    );
+    final baseUri = Uri.parse('$repoWebUrl/issues/new');
+    Uri makeUri(int maxBodyLen) => baseUri.replace(
+          queryParameters: {
+            'title': title,
+            'labels': 'bug',
+            'body': buildCrashReportMarkdown(
+              appVersion: appVersion,
+              platformOverride: platformOverride,
+              maxLength: maxBodyLen,
+            ),
+          },
+        );
+    final uri = makeUri(2600);
+    if (uri.toString().length <= 7000) return uri;
+    return makeUri(1800);
   }
 
   void _append(LogEntry entry) {
