@@ -674,6 +674,47 @@ class S {
   String get widgetDeadlinesDesc => isRu
       ? 'Срочные несданные задания (без скрытых)'
       : 'Upcoming pending tasks (excludes hidden)';
+  String get widgetPreviewLight => isRu ? 'Светлая' : 'Light Theme';
+  String get widgetPreviewDark => isRu ? 'Тёмная' : 'Dark Theme';
+  String get widgetNextLectureOverline =>
+      isRu ? 'СЛЕДУЮЩАЯ ПАРА' : 'NEXT LECTURE';
+  String get widgetTimetableOverline =>
+      isRu ? 'РАСПИСАНИЕ' : 'TIMETABLE';
+  String get widgetDeadlinesShortTitle =>
+      isRu ? 'Дедлайны' : 'Deadlines';
+  String get widgetDonePill => isRu ? 'Готово' : 'Done';
+  String get widgetTapToOpen =>
+      isRu ? 'Нажмите, чтобы открыть' : 'Tap to open schedule';
+  String get widgetNoUpcoming =>
+      isRu ? 'Ближайших пар нет' : 'No upcoming classes';
+  String get widgetSelectGroupApp =>
+      isRu ? 'Выберите группу в приложении' : 'Select your group in app';
+  String get widgetSyncInsPrompt =>
+      isRu ? 'Откройте INS' : 'Sync INS portal';
+  String get widgetToday => isRu ? 'Сегодня' : 'Today';
+  String get widgetTomorrow => isRu ? 'Завтра' : 'Tomorrow';
+  String widgetClassesPlural(int count) {
+    if (!isRu) return count == 1 ? '1 class' : '$count classes';
+    final m100 = count % 100;
+    final m10 = count % 10;
+    if (m100 >= 11 && m100 <= 14) return '$count пар';
+    if (m10 == 1) return '$count пара';
+    if (m10 >= 2 && m10 <= 4) return '$count пары';
+    return '$count пар';
+  }
+  String widgetCoursesPlural(int count) {
+    if (!isRu) return count == 1 ? '1 course' : '$count courses';
+    final m100 = count % 100;
+    final m10 = count % 10;
+    if (m100 >= 11 && m100 <= 14) return '$count курсов';
+    if (m10 == 1) return '$count курс';
+    if (m10 >= 2 && m10 <= 4) return '$count курса';
+    return '$count курсов';
+  }
+  String widgetDuePlural(int count) {
+    if (count == 0) return widgetDonePill;
+    return isRu ? '$count активн.' : '$count due';
+  }
 
   // #7 Privacy & Security
   String get privacyPolicyTitle =>
@@ -866,4 +907,31 @@ class S {
       : 'Diagnostic logging is turned off by default and is completely optional (only suggested if an error occurs). Logs never collect passwords, Student ID, grades, or personal information — any sensitive fields are automatically stripped.';
   String get privacyOpenLogsBtn =>
       isRu ? 'Настроить диагностические логи' : 'Configure Diagnostic Logs';
+
+  String get avatarSheetTitle => isRu ? 'Фото профиля' : 'Profile Photo';
+  String get avatarSheetSub => isRu
+      ? 'Хранится только на вашем устройстве'
+      : 'Stored locally on your device only';
+  String get avatarChooseGallery =>
+      isRu ? 'Выбрать из галереи' : 'Choose from Gallery';
+  String get avatarResetBtn =>
+      isRu ? 'Сбросить к фото из eClass' : 'Reset to eClass Photo';
+  String get avatarUpdatedToast =>
+      isRu ? 'Аватарка обновлена' : 'Profile photo updated';
+  String get avatarResetToast =>
+      isRu ? 'Аватарка сброшена' : 'Profile photo reset';
+  String get avatarErrorToast => isRu
+      ? 'Не удалось обновить аватарку'
+      : 'Failed to update profile photo';
+  String get avatarUploadEclassTitle =>
+      isRu ? 'Также загрузить в eClass' : 'Also upload to eClass';
+  String get avatarUploadEclassSub => isRu
+      ? 'Фото увидят преподаватели и одногруппники'
+      : 'Visible to professors and classmates';
+  String get avatarUploadedEclassToast => isRu
+      ? 'Аватарка обновлена и загружена в eClass'
+      : 'Profile photo updated & uploaded to eClass';
+  String get avatarUploadEclassFailedToast => isRu
+      ? 'Сохранено локально, но не удалось загрузить в eClass'
+      : 'Saved locally, but upload to eClass failed';
 }

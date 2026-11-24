@@ -55,6 +55,7 @@ class AppState extends ChangeNotifier {
   AppReleaseInfo? availableUpdate;
   bool updateBannerDismissed = false;
   String? profileAvatarPath;
+  bool hasCustomAvatar = false;
   List<String> _groupHints = [];
   bool _autoDetectInFlight = false;
 
@@ -188,9 +189,16 @@ class AppState extends ChangeNotifier {
     await AppLogger.instance.init(enabled: settings.diagnosticsEnabled);
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final avatarFile = File(p.join(dir.path, 'profile_avatar.jpg'));
-      if (await avatarFile.exists()) {
-        profileAvatarPath = avatarFile.path;
+      final customAvatar = await _findCustomAvatarFile(dir);
+      if (customAvatar != null) {
+        profileAvatarPath = customAvatar.path;
+        hasCustomAvatar = true;
+      } else {
+        final avatarFile = File(p.join(dir.path, 'profile_avatar.jpg'));
+        if (await avatarFile.exists()) {
+          profileAvatarPath = avatarFile.path;
+        }
+        hasCustomAvatar = false;
       }
     } catch (_) {}
     credentials = await _db.getCredentials();
@@ -283,8 +291,27 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
+  Future<File?> _findCustomAvatarFile(Directory dir) async {
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is File &&
+          p.basename(entity.path).startsWith('custom_avatar_')) {
+        return entity;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _deleteCustomAvatarFiles(Directory dir) async {
+    await for (final entity in dir.list(followLinks: false)) {
+      if (entity is File &&
+          p.basename(entity.path).startsWith('custom_avatar_')) {
+        await entity.delete();
+      }
+    }
+  }
+
   Future<void> syncProfilePhoto() async {
-    if (!isLoggedIn) return;
+    if (!isLoggedIn || hasCustomAvatar) return;
     try {
       final dir = await getApplicationDocumentsDirectory();
       final targetPath = p.join(dir.path, 'profile_avatar.jpg');
@@ -296,6 +323,63 @@ class AppState extends ChangeNotifier {
       }
     } catch (e) {
       AppLogger.instance.error('AVATAR', 'Failed to sync profile photo', e);
+    }
+  }
+
+  Future<bool> setCustomAvatar(String sourcePath) async {
+    try {
+      final src = File(sourcePath);
+      if (!await src.exists()) return false;
+      final dir = await getApplicationDocumentsDirectory();
+      await _deleteCustomAvatarFiles(dir);
+      final rawExt = p.extension(sourcePath).toLowerCase();
+      final ext = (rawExt.isNotEmpty && rawExt.length <= 5) ? rawExt : '.jpg';
+      final dest = File(
+        p.join(
+            dir.path, 'custom_avatar_${DateTime.now().millisecondsSinceEpoch}$ext'),
+      );
+      await src.copy(dest.path);
+      profileAvatarPath = dest.path;
+      hasCustomAvatar = true;
+      notifyListeners();
+      AppLogger.instance.info('AVATAR', 'Updated custom profile photo');
+      return true;
+    } catch (e) {
+      AppLogger.instance.error('AVATAR', 'Failed to set custom avatar', e);
+      return false;
+    }
+  }
+
+  Future<void> resetCustomAvatar() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      await _deleteCustomAvatarFiles(dir);
+      hasCustomAvatar = false;
+      final eclassFile = File(p.join(dir.path, 'profile_avatar.jpg'));
+      profileAvatarPath = await eclassFile.exists() ? eclassFile.path : null;
+      notifyListeners();
+      AppLogger.instance.info('AVATAR', 'Reset custom profile photo');
+      syncProfilePhoto();
+    } catch (e) {
+      AppLogger.instance.error('AVATAR', 'Failed to reset custom avatar', e);
+    }
+  }
+
+  Future<String?> uploadProfilePhotoToEclass(String sourcePath) async {
+    if (!isLoggedIn) return 'Not signed in';
+    try {
+      await eclass.uploadProfilePhoto(sourcePath);
+      try {
+        final dir = await getApplicationDocumentsDirectory();
+        final eclassCache = File(p.join(dir.path, 'profile_avatar.jpg'));
+        await File(sourcePath).copy(eclassCache.path);
+      } catch (_) {}
+      AppLogger.instance.info('AVATAR', 'Uploaded profile photo to eClass');
+      return null;
+    } catch (e) {
+      AppLogger.instance
+          .error('AVATAR', 'Failed to upload profile photo to eClass', e);
+      return e.toString();
     }
   }
 
@@ -328,6 +412,7 @@ class AppState extends ChangeNotifier {
       if (await avatarFile.exists()) {
         await avatarFile.delete();
       }
+      await _deleteCustomAvatarFiles(dir);
     } catch (_) {}
     await AppLogger.instance.clear();
     await NotificationService.instance
@@ -340,6 +425,7 @@ class AppState extends ChangeNotifier {
     await _db.saveSetting('timetable_group_auto_detected', 'false');
     credentials = null;
     profileAvatarPath = null;
+    hasCustomAvatar = false;
     _groupHints = [];
     courses = [];
     allAssignments = [];

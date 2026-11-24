@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -35,6 +36,163 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadCacheSize() async {
     final bytes = await context.read<AppState>().getDownloadsCacheBytes();
     if (mounted) setState(() => _cacheBytes = bytes);
+  }
+
+  Future<void> _showAvatarSheet(
+    BuildContext context,
+    AppState app,
+    String displayName,
+  ) async {
+    final s = app.s;
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    var uploadToEclass = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: cs.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (sheetCtx, setSheetState) {
+            return SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InitialsAvatar(
+                      name: displayName,
+                      imagePath: app.profileAvatarPath,
+                      size: 72,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      s.avatarSheetTitle,
+                      style:
+                          tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      s.avatarSheetSub,
+                      textAlign: TextAlign.center,
+                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: SwitchListTile.adaptive(
+                        key: const ValueKey('avatar_upload_eclass_switch'),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 2),
+                        value: uploadToEclass,
+                        onChanged: (v) {
+                          AppHaptics.selection();
+                          setSheetState(() => uploadToEclass = v);
+                        },
+                        title: Text(
+                          s.avatarUploadEclassTitle,
+                          style: tt.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        subtitle: Text(
+                          s.avatarUploadEclassSub,
+                          style: tt.bodySmall
+                              ?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        key: const ValueKey('avatar_choose_gallery_btn'),
+                        onPressed: () async {
+                          AppHaptics.selection();
+                          final picked = await FilePicker.platform.pickFiles(
+                            type: FileType.image,
+                            allowMultiple: false,
+                          );
+                          final files = picked?.files;
+                          final path = (files != null && files.isNotEmpty)
+                              ? files.first.path
+                              : null;
+                          if (path == null || path.isEmpty) return;
+                          if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
+                          final ok = await app.setCustomAvatar(path);
+                          if (!ok) {
+                            if (context.mounted) {
+                              showQuickToast(context, s.avatarErrorToast);
+                            }
+                            return;
+                          }
+                          if (uploadToEclass) {
+                            final err =
+                                await app.uploadProfilePhotoToEclass(path);
+                            if (context.mounted) {
+                              showQuickToast(
+                                context,
+                                err == null
+                                    ? s.avatarUploadedEclassToast
+                                    : s.avatarUploadEclassFailedToast,
+                              );
+                            }
+                          } else if (context.mounted) {
+                            showQuickToast(context, s.avatarUpdatedToast);
+                          }
+                        },
+                        style: FilledButton.styleFrom(
+                          shape: const StadiumBorder(),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        icon:
+                            const Icon(Icons.photo_library_outlined, size: 19),
+                        label: Text(
+                          s.avatarChooseGallery,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
+                    if (app.hasCustomAvatar) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          key: const ValueKey('avatar_reset_btn'),
+                          onPressed: () async {
+                            AppHaptics.medium();
+                            Navigator.of(sheetCtx).pop();
+                            await app.resetCustomAvatar();
+                            if (context.mounted) {
+                              showQuickToast(context, s.avatarResetToast);
+                            }
+                          },
+                          style: OutlinedButton.styleFrom(
+                            shape: const StadiumBorder(),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          icon: const Icon(Icons.restore_rounded, size: 19),
+                          label: Text(
+                            s.avatarResetBtn,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _showInsPasswordDialog(
@@ -166,11 +324,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         },
                   child: Row(
                     children: [
-                      InitialsAvatar(
-                        name: displayName,
-                        imagePath: app.profileAvatarPath,
-                        size: 48,
-                        showVerifiedBadge: true,
+                      Tooltip(
+                        message: s.avatarSheetTitle,
+                        child: Material(
+                          color: Colors.transparent,
+                          shape: const CircleBorder(),
+                          clipBehavior: Clip.none,
+                          child: InkWell(
+                            key: const ValueKey('profile_avatar_tap'),
+                            customBorder: const CircleBorder(),
+                            onTap: () {
+                              AppHaptics.selection();
+                              _showAvatarSheet(context, app, displayName);
+                            },
+                            child: InitialsAvatar(
+                              name: displayName,
+                              imagePath: app.profileAvatarPath,
+                              size: 48,
+                              badgeIcon: Icons.camera_alt_rounded,
+                            ),
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 14),
                       Expanded(

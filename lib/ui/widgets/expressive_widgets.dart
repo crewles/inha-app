@@ -599,6 +599,7 @@ class InitialsAvatar extends StatelessWidget {
   final Color? backgroundColor;
   final Color? foregroundColor;
   final bool showVerifiedBadge;
+  final IconData? badgeIcon;
 
   const InitialsAvatar({
     super.key,
@@ -608,6 +609,7 @@ class InitialsAvatar extends StatelessWidget {
     this.backgroundColor,
     this.foregroundColor,
     this.showVerifiedBadge = false,
+    this.badgeIcon,
   });
 
   String get _initials {
@@ -656,6 +658,7 @@ class InitialsAvatar extends StatelessWidget {
           ? ClipOval(
               child: Image.file(
                 File(imagePath!),
+                key: ValueKey(imagePath),
                 width: size,
                 height: size,
                 fit: BoxFit.cover,
@@ -665,8 +668,10 @@ class InitialsAvatar extends StatelessWidget {
           : fallback,
     );
 
-    if (!showVerifiedBadge) return circle;
+    if (!showVerifiedBadge && badgeIcon == null) return circle;
 
+    final badgeSize = badgeIcon != null ? 18.0 : 16.0;
+    final iconSize = badgeIcon != null ? 11.0 : 10.0;
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -675,14 +680,18 @@ class InitialsAvatar extends StatelessWidget {
           right: -1,
           bottom: -1,
           child: Container(
-            width: 16,
-            height: 16,
+            width: badgeSize,
+            height: badgeSize,
             decoration: BoxDecoration(
               color: cs.primary,
               shape: BoxShape.circle,
               border: Border.all(color: cs.surfaceContainerLowest, width: 2),
             ),
-            child: Icon(Icons.check_rounded, size: 10, color: cs.onPrimary),
+            child: Icon(
+              badgeIcon ?? Icons.check_rounded,
+              size: iconSize,
+              color: cs.onPrimary,
+            ),
           ),
         ),
       ],

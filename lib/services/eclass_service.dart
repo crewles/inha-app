@@ -375,6 +375,212 @@ class EclassService {
     return null;
   }
 
+  /// Extracts non-button/non-checkbox form inputs from eClass `/user/edit.php`
+  /// so saving a new profile picture preserves existing user profile values
+  /// without accidentally triggering `deletepicture`.
+  static Map<String, String> parseProfileEditFormFields(String html) {
+    final doc = html_parser.parse(html);
+    final form = doc.querySelector('form[action*="user_edit.php"]') ??
+        doc.querySelector('form[action*="edit.php"]') ??
+        doc.querySelector('form.mform');
+    if (form == null) return {};
+
+    final fields = <String, String>{};
+    for (final inp in form.querySelectorAll('input[name]')) {
+      final name = inp.attributes['name'] ?? '';
+      if (name.isEmpty) continue;
+      final type = (inp.attributes['type'] ?? 'text').toLowerCase();
+      if (type == 'hidden' ||
+          type == 'text' ||
+          type == 'email' ||
+          type == 'tel') {
+        fields[name] = inp.attributes['value'] ?? '';
+      }
+    }
+    for (final sel in form.querySelectorAll('select[name]')) {
+      final name = sel.attributes['name'] ?? '';
+      if (name.isEmpty) continue;
+      final opt = sel.querySelector('option[selected]') ??
+          sel.querySelector('option');
+      fields[name] = opt?.attributes['value'] ?? opt?.text.trim() ?? '';
+    }
+    for (final ta in form.querySelectorAll('textarea[name]')) {
+      final name = ta.attributes['name'] ?? '';
+      if (name.isEmpty) continue;
+      fields[name] = ta.text;
+    }
+    return fields;
+  }
+
+  /// Uploads [filePath] into Moodle's `M.form_filemanager.init` draft area on
+  /// the given [html] page and returns the resulting `itemid`.
+  Future<String> _uploadFileToWebDraftManager({
+    required String html,
+    required String filePath,
+    required String filename,
+    String formSesskey = '',
+    String unavailableMsg = 'File upload form unavailable on eClass',
+  }) async {
+    final initMarker = html.indexOf('M.form_filemanager.init(');
+    if (initMarker < 0) {
+      throw EclassException(unavailableMsg);
+    }
+    final braceIdx = html.indexOf('{', initMarker);
+    final jsonStr = _extractBalancedJsonObject(html, braceIdx);
+    if (jsonStr == null) {
+      throw EclassException('Could not parse eClass file manager config');
+    }
+
+    final fmCfg = jsonDecode(jsonStr) as Map<String, dynamic>;
+    final itemId = fmCfg['itemid']?.toString() ?? '';
+    final clientId = fmCfg['client_id']?.toString() ?? '';
+    final ctxId = (fmCfg['context'] is Map)
+        ? (fmCfg['context'] as Map)['id']?.toString() ?? ''
+        : '';
+    final author = fmCfg['author']?.toString() ?? 'Student';
+    final license = fmCfg['defaultlicense']?.toString() ?? 'allrightsreserved';
+    final maxFiles = int.tryParse(fmCfg['maxfiles']?.toString() ?? '');
+    final existingList = (fmCfg['list'] as List?) ?? const [];
+
+    String? uploadRepoId;
+    final fp = fmCfg['filepicker'];
+    if (fp is Map && fp['repositories'] is Map) {
+      for (final entry in (fp['repositories'] as Map).entries) {
+        final v = entry.value;
+        if (v is Map && v['type'] == 'upload') {
+          uploadRepoId = (v['id'] ?? entry.key).toString();
+          break;
+        }
+      }
+    }
+
+    final sessMatch = RegExp(r'"sesskey":"([^"]+)"').firstMatch(html);
+    final sesskey = sessMatch?.group(1) ?? formSesskey;
+    if (itemId.isEmpty ||
+        clientId.isEmpty ||
+        ctxId.isEmpty ||
+        uploadRepoId == null ||
+        sesskey.isEmpty) {
+      throw EclassException('Missing required Moodle upload parameters');
+    }
+
+    // If single-file limit already has a draft item, clear it first.
+    if (maxFiles == 1 && existingList.isNotEmpty) {
+      for (final old in existingList) {
+        if (old is! Map) continue;
+        final oldName = old['filename']?.toString() ?? '';
+        final oldPath = old['filepath']?.toString() ?? '/';
+        if (oldName.isEmpty) continue;
+        try {
+          await _dio.post<dynamic>(
+            '$baseUrl/repository/draftfiles_ajax.php?action=delete',
+            data: {
+              'sesskey': sesskey,
+              'client_id': clientId,
+              'draftitemid': itemId,
+              'filepath': oldPath,
+              'filename': oldName,
+            },
+            options: Options(
+              contentType: Headers.formUrlEncodedContentType,
+              responseType: ResponseType.plain,
+            ),
+          );
+        } catch (_) {}
+      }
+    }
+
+    final uploadForm = FormData.fromMap({
+      'repo_id': uploadRepoId,
+      'itemid': itemId,
+      'ctx_id': ctxId,
+      'client_id': clientId,
+      'sesskey': sesskey,
+      'savepath': '/',
+      'title': filename,
+      'author': author,
+      'license': license,
+      'repo_upload_file':
+          await MultipartFile.fromFile(filePath, filename: filename),
+    });
+
+    final repoResp = await _dio.post<dynamic>(
+      '$baseUrl/repository/repository_ajax.php?action=upload',
+      data: uploadForm,
+      options: Options(responseType: ResponseType.plain),
+    );
+    final repoRaw = (repoResp.data?.toString() ?? '').trim();
+    if (repoRaw.isNotEmpty) {
+      try {
+        final repoDecoded = jsonDecode(repoRaw);
+        if (repoDecoded is Map && repoDecoded['error'] != null) {
+          throw EclassException(repoDecoded['error'].toString());
+        }
+      } on FormatException {
+        throw EclassException('Unexpected web upload response from eClass');
+      }
+    }
+
+    return itemId;
+  }
+
+  /// Uploads [filePath] as the student's eClass profile photo via `/user/edit.php`.
+  Future<void> uploadProfilePhoto(String filePath) async {
+    if (!await ensureWebLoggedIn()) {
+      throw EclassException('eClass web session expired');
+    }
+    final editResp = await _getAuthedHtml('$baseUrl/user/edit.php');
+    final html = editResp.data ?? '';
+    if (_isLoginPage(editResp.finalUri, html)) {
+      throw EclassException('eClass web session expired');
+    }
+
+    final doc = html_parser.parse(html);
+    final form = doc.querySelector('form[action*="user_edit.php"]') ??
+        doc.querySelector('form[action*="edit.php"]') ??
+        doc.querySelector('form.mform');
+    final payload = parseProfileEditFormFields(html);
+    if (form == null || payload.isEmpty) {
+      throw EclassException('Profile edit form missing on eClass page');
+    }
+
+    final rawName = p.basename(filePath);
+    final filename = rawName.isEmpty ? 'avatar.jpg' : rawName;
+    final itemId = await _uploadFileToWebDraftManager(
+      html: html,
+      filePath: filePath,
+      filename: filename,
+      formSesskey: payload['sesskey'] ?? '',
+      unavailableMsg: 'Profile picture upload is not available on eClass',
+    );
+
+    payload['imagefile'] = itemId;
+    payload['submitbutton'] =
+        form.querySelector('input[name="submitbutton"]')?.attributes['value'] ??
+            'Update profile';
+
+    final actionRaw = form.attributes['action'] ?? '';
+    final actionUri = actionRaw.isNotEmpty
+        ? editResp.finalUri.resolve(actionRaw)
+        : Uri.parse('$baseUrl/user/user_edit.php');
+
+    final saveResp = await requestWithRedirects<String>(
+      _dio,
+      actionUri.toString(),
+      method: 'POST',
+      data: payload,
+      options: Options(
+        contentType: Headers.formUrlEncodedContentType,
+        responseType: ResponseType.plain,
+      ),
+    );
+    final saveHtml = saveResp.data ?? '';
+    final errEl = html_parser.parse(saveHtml).querySelector('.mform .error');
+    if (errEl != null && errEl.text.trim().isNotEmpty) {
+      throw EclassException(errEl.text.trim());
+    }
+  }
+
   // ── eClass Private Files (/user/files.php & user/private) ──
 
   static String _normalizePrivatePath(String raw) {
@@ -2201,38 +2407,6 @@ class EclassService {
       throw EclassException('eClass web session expired');
     }
 
-    final initMarker = html.indexOf('M.form_filemanager.init(');
-    if (initMarker < 0) {
-      throw EclassException('File upload form unavailable for this assignment');
-    }
-    final braceIdx = html.indexOf('{', initMarker);
-    final jsonStr = _extractBalancedJsonObject(html, braceIdx);
-    if (jsonStr == null) {
-      throw EclassException('Could not parse assignment file manager config');
-    }
-
-    final fmCfg = jsonDecode(jsonStr) as Map<String, dynamic>;
-    final itemId = fmCfg['itemid']?.toString() ?? '';
-    final clientId = fmCfg['client_id']?.toString() ?? '';
-    final ctxId = (fmCfg['context'] is Map)
-        ? (fmCfg['context'] as Map)['id']?.toString() ?? ''
-        : '';
-    final author = fmCfg['author']?.toString() ?? 'Student';
-    final maxFiles = int.tryParse(fmCfg['maxfiles']?.toString() ?? '');
-    final existingList = (fmCfg['list'] as List?) ?? const [];
-
-    String? uploadRepoId;
-    final fp = fmCfg['filepicker'];
-    if (fp is Map && fp['repositories'] is Map) {
-      for (final entry in (fp['repositories'] as Map).entries) {
-        final v = entry.value;
-        if (v is Map && v['type'] == 'upload') {
-          uploadRepoId = (v['id'] ?? entry.key).toString();
-          break;
-        }
-      }
-    }
-
     final doc = html_parser.parse(html);
     final form = doc.querySelector('form[action*="view.php"]') ??
         doc.querySelector('form.mform');
@@ -2255,72 +2429,13 @@ class EclassService {
       payload['onlinetext_editor[text]'] = textarea.text;
     }
 
-    final sessMatch = RegExp(r'"sesskey":"([^"]+)"').firstMatch(html);
-    final sesskey = sessMatch?.group(1) ?? payload['sesskey'] ?? '';
-    if (itemId.isEmpty ||
-        clientId.isEmpty ||
-        ctxId.isEmpty ||
-        uploadRepoId == null ||
-        sesskey.isEmpty) {
-      throw EclassException('Missing required Moodle upload parameters');
-    }
-
-    // If single-file limit already reached in draft area, clear old draft file first.
-    if (maxFiles == 1 && existingList.isNotEmpty) {
-      for (final old in existingList) {
-        if (old is! Map) continue;
-        final oldName = old['filename']?.toString() ?? '';
-        final oldPath = old['filepath']?.toString() ?? '/';
-        if (oldName.isEmpty) continue;
-        try {
-          await _dio.post<dynamic>(
-            '$baseUrl/repository/draftfiles_ajax.php?action=delete',
-            data: {
-              'sesskey': sesskey,
-              'client_id': clientId,
-              'draftitemid': itemId,
-              'filepath': oldPath,
-              'filename': oldName,
-            },
-            options: Options(
-              contentType: Headers.formUrlEncodedContentType,
-              responseType: ResponseType.plain,
-            ),
-          );
-        } catch (_) {}
-      }
-    }
-
-    final uploadForm = FormData.fromMap({
-      'repo_id': uploadRepoId,
-      'itemid': itemId,
-      'ctx_id': ctxId,
-      'client_id': clientId,
-      'sesskey': sesskey,
-      'savepath': '/',
-      'title': filename,
-      'author': author,
-      'license': 'allrightsreserved',
-      'repo_upload_file':
-          await MultipartFile.fromFile(filePath, filename: filename),
-    });
-
-    final repoResp = await _dio.post<dynamic>(
-      '$baseUrl/repository/repository_ajax.php?action=upload',
-      data: uploadForm,
-      options: Options(responseType: ResponseType.plain),
+    final itemId = await _uploadFileToWebDraftManager(
+      html: html,
+      filePath: filePath,
+      filename: filename,
+      formSesskey: payload['sesskey'] ?? '',
+      unavailableMsg: 'File upload form unavailable for this assignment',
     );
-    final repoRaw = (repoResp.data?.toString() ?? '').trim();
-    if (repoRaw.isNotEmpty) {
-      try {
-        final repoDecoded = jsonDecode(repoRaw);
-        if (repoDecoded is Map && repoDecoded['error'] != null) {
-          throw EclassException(repoDecoded['error'].toString());
-        }
-      } on FormatException {
-        throw EclassException('Unexpected web upload response from eClass');
-      }
-    }
 
     payload['files_filemanager'] = itemId;
     payload['submitbutton'] =

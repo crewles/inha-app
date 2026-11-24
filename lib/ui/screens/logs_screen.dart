@@ -210,9 +210,8 @@ class _LogsScreenState extends State<LogsScreen> {
                               s.logsCopyBtn,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: tt.labelLarge?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700),
                             ),
                           ),
                         ),
@@ -238,8 +237,7 @@ class _LogsScreenState extends State<LogsScreen> {
                               size: 18),
                           label: Text(
                             s.logsClearBtn,
-                            style: tt.labelLarge
-                                ?.copyWith(fontWeight: FontWeight.w700),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                         ),
                       ],
@@ -264,8 +262,7 @@ class _LogsScreenState extends State<LogsScreen> {
                           s.logsReportGithubBtn,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: tt.labelLarge
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                       ),
                     ),
