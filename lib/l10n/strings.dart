@@ -183,6 +183,14 @@ class S {
   List<String> get dayFullNames => isRu
       ? ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница']
       : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  String widgetDayName(int weekdayIdx) {
+    if (weekdayIdx >= 0 && weekdayIdx < dayFullNames.length) {
+      return dayFullNames[weekdayIdx];
+    }
+    if (weekdayIdx == 5) return isRu ? 'Суббота' : 'Saturday';
+    if (weekdayIdx == 6) return isRu ? 'Воскресенье' : 'Sunday';
+    return dayFullNames.first;
+  }
   String dayScheduleTitle(int idx) => isRu
       ? 'Расписание • ${dayFullNames[idx]}'
       : '${dayFullNames[idx]} Schedule';

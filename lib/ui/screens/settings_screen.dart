@@ -132,8 +132,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             return;
                           }
                           if (uploadToEclass) {
-                            final err =
-                                await app.uploadProfilePhotoToEclass(path);
+                            final err = await app.uploadProfilePhotoToEclass(
+                                app.profileAvatarPath ?? path);
                             if (context.mounted) {
                               showQuickToast(
                                 context,

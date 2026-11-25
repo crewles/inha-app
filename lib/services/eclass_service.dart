@@ -302,7 +302,7 @@ class EclassService {
     return clean.startsWith('http://') || clean.startsWith('https://');
   }
 
-  static bool _hasValidImageMagicBytes(List<int> bytes) {
+  static bool hasValidImageMagicBytes(List<int> bytes) {
     if (bytes.length < 12) return false;
     final isJpeg = bytes[0] == 0xFF && bytes[1] == 0xD8;
     final isPng = bytes[0] == 0x89 && bytes[1] == 0x50;
@@ -364,7 +364,7 @@ class EclassService {
         if (resp.statusCode == 200 &&
             bytes != null &&
             bytes.length > 200 &&
-            _hasValidImageMagicBytes(bytes)) {
+            hasValidImageMagicBytes(bytes)) {
           final file = File(savePath);
           await file.parent.create(recursive: true);
           await file.writeAsBytes(bytes, flush: true);
@@ -575,6 +575,13 @@ class EclassService {
       ),
     );
     final saveHtml = saveResp.data ?? '';
+    final statusCode = saveResp.statusCode ?? 0;
+    if (statusCode >= 400) {
+      throw EclassException('eClass rejected profile update (HTTP $statusCode)');
+    }
+    if (_isLoginPage(saveResp.finalUri, saveHtml)) {
+      throw EclassException('eClass web session expired');
+    }
     final errEl = html_parser.parse(saveHtml).querySelector('.mform .error');
     if (errEl != null && errEl.text.trim().isNotEmpty) {
       throw EclassException(errEl.text.trim());

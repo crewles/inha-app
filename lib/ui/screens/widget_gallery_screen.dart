@@ -327,9 +327,12 @@ class _WidgetGalleryScreenState extends State<WidgetGalleryScreen> {
     final next = TimetableService.findNextLesson(groupEntries);
 
     final now = TimetableService.nowTashkent();
-    final todayIdx = now.weekday <= 5 ? now.weekday - 1 : 0;
-    final todayCode = TimetableService.dayNames[todayIdx];
-    final todayLessons = TimetableService.filterByDay(groupEntries, todayCode);
+    final todayIdx = now.weekday - 1;
+    final todayCode =
+        todayIdx < 5 ? TimetableService.dayNames[todayIdx] : '';
+    final todayLessons = todayCode.isEmpty
+        ? <ScheduleEntry>[]
+        : TimetableService.filterByDay(groupEntries, todayCode);
 
     final gpa = formatGpa(app.insData?.gpaInfo['gpa'] ?? '');
     final gpaNumeric = double.tryParse(gpa.replaceAll(',', '.')) ?? 0.0;
@@ -723,7 +726,7 @@ class _WidgetGalleryScreenState extends State<WidgetGalleryScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      s.dayFullNames[todayIdx],
+                      s.widgetDayName(todayIdx),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(

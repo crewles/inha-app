@@ -330,6 +330,17 @@ class AppState extends ChangeNotifier {
     try {
       final src = File(sourcePath);
       if (!await src.exists()) return false;
+      final size = await src.length();
+      if (size <= 0 || size > 15 * 1024 * 1024) return false;
+      final raf = await src.open();
+      final List<int> head;
+      try {
+        head = await raf.read(16);
+      } finally {
+        await raf.close();
+      }
+      if (!EclassService.hasValidImageMagicBytes(head)) return false;
+
       final dir = await getApplicationDocumentsDirectory();
       await _deleteCustomAvatarFiles(dir);
       final rawExt = p.extension(sourcePath).toLowerCase();
@@ -356,7 +367,13 @@ class AppState extends ChangeNotifier {
       await _deleteCustomAvatarFiles(dir);
       hasCustomAvatar = false;
       final eclassFile = File(p.join(dir.path, 'profile_avatar.jpg'));
-      profileAvatarPath = await eclassFile.exists() ? eclassFile.path : null;
+      final hasEclass = await eclassFile.exists();
+      if (hasEclass) {
+        try {
+          await FileImage(eclassFile).evict();
+        } catch (_) {}
+      }
+      profileAvatarPath = hasEclass ? eclassFile.path : null;
       notifyListeners();
       AppLogger.instance.info('AVATAR', 'Reset custom profile photo');
       syncProfilePhoto();
@@ -373,6 +390,7 @@ class AppState extends ChangeNotifier {
         final dir = await getApplicationDocumentsDirectory();
         final eclassCache = File(p.join(dir.path, 'profile_avatar.jpg'));
         await File(sourcePath).copy(eclassCache.path);
+        await FileImage(eclassCache).evict();
       } catch (_) {}
       AppLogger.instance.info('AVATAR', 'Uploaded profile photo to eClass');
       return null;

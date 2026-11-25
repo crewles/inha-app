@@ -73,6 +73,8 @@ object WidgetDbHelper {
             Calendar.WEDNESDAY -> 2
             Calendar.THURSDAY -> 3
             Calendar.FRIDAY -> 4
+            Calendar.SATURDAY -> 5
+            Calendar.SUNDAY -> 6
             else -> 0
         }
 
@@ -244,9 +246,8 @@ object WidgetDbHelper {
             allLessons.filter { l -> l.classes.any { it.trim().lowercase() == groupLower } }
         }
 
-        val wd = nowCal.get(Calendar.DAY_OF_WEEK)
-        val isWeekday = wd in Calendar.MONDAY..Calendar.FRIDAY
-        val todayCode = dayNames[todayIdx]
+        val isWeekday = todayIdx in 0..4
+        val todayCode = if (isWeekday) dayNames[todayIdx] else ""
         val todayLessons = if (isWeekday) {
             groupLessons.filter { it.days.contains(todayCode) }.sortedBy { it.start }
         } else {

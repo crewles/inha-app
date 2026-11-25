@@ -643,9 +643,7 @@ class InitialsAvatar extends StatelessWidget {
             ),
     );
 
-    final hasFile = imagePath != null &&
-        imagePath!.isNotEmpty &&
-        File(imagePath!).existsSync();
+    final hasFile = imagePath != null && imagePath!.isNotEmpty;
 
     final circle = Container(
       width: size,

@@ -36,8 +36,24 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
 
     companion object {
         private val dayCodes = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
-        private val ruDays = listOf("Понедельник", "Вторник", "Среда", "Четверг", "Пятница")
-        private val enDays = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+        private val ruDays = listOf(
+            "Понедельник",
+            "Вторник",
+            "Среда",
+            "Четверг",
+            "Пятница",
+            "Суббота",
+            "Воскресенье"
+        )
+        private val enDays = listOf(
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+        )
 
         fun updateAll(context: Context) {
             val mgr = AppWidgetManager.getInstance(context)
@@ -62,7 +78,8 @@ class TodayScheduleWidgetProvider : AppWidgetProvider() {
                 WidgetDbHelper.createOpenTabIntent(context, 2, 102)
             )
 
-            val dayTitle = if (snap.isRu) ruDays[snap.todayWeekdayIdx] else enDays[snap.todayWeekdayIdx]
+            val dayList = if (snap.isRu) ruDays else enDays
+            val dayTitle = dayList.getOrElse(snap.todayWeekdayIdx) { dayList.first() }
             views.setTextViewText(R.id.tv_header, dayTitle)
             if (snap.group.isNotEmpty()) {
                 views.setViewVisibility(R.id.tv_group, View.VISIBLE)
