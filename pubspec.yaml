@@ -1,7 +1,7 @@
 name: inhahub
 description: "Inha App — Android client for Inha University (Tashkent): eClass, INS, EduPage Timetable with Material 3 and local SQLite."
 publish_to: 'none'
-version: 1.2.3+10
+version: 1.2.4+11
 
 environment:
   sdk: ^3.5.0
