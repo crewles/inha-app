@@ -394,23 +394,29 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   const SizedBox(height: 18),
                   Row(
                     children: [
-                      Flexible(
-                        child: Text(
-                          s.dayFullNames[_selectedDayIdx],
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: tt.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                s.dayFullNames[_selectedDayIdx],
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: tt.titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ExpressivePill(
+                              label: s.classesCount(dayEntries.length),
+                              backgroundColor: cs.surfaceContainerHigh,
+                              foregroundColor: cs.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 8),
-                      ExpressivePill(
-                        label: s.classesCount(dayEntries.length),
-                        backgroundColor: cs.surfaceContainerHigh,
-                        foregroundColor: cs.primary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      const Spacer(),
                       Text(
                         _formattedSelectedDate(s),
                         style: tt.labelSmall?.copyWith(
