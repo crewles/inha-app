@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/models.dart';
 import '../../state/app_state.dart';
+import '../widgets/ai_review_sheet.dart';
 import '../widgets/app_haptics.dart';
 import '../widgets/expressive_widgets.dart';
 import 'course_detail_screen.dart';
@@ -418,6 +419,72 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 14),
+
+            // AI Homework Check Card (BYOK)
+            ExpressiveCard(
+              key: const ValueKey('ad_ai_check_card'),
+              borderRadius: 24,
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  SquircleIcon(
+                    size: 40,
+                    radius: 13,
+                    iconSize: 21,
+                    icon: Icons.auto_awesome_rounded,
+                    backgroundColor: cs.primaryFixed,
+                    iconColor: cs.onPrimaryFixed,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          s.aiCheckCardTitle,
+                          style: tt.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          app.settings.isAiConfigured
+                              ? s.aiCheckCardSubConfigured(app.settings.aiModel)
+                              : s.aiCheckCardSubUnconfigured,
+                          style: tt.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton.tonal(
+                    key: const ValueKey('ad_ai_check_btn'),
+                    onPressed: () {
+                      AppHaptics.selection();
+                      showAiReviewSheet(
+                        context,
+                        assignment: a,
+                        initialPickedFile: _pickedFile,
+                      );
+                    },
+                    style: FilledButton.styleFrom(
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                    ),
+                    child: Text(
+                      app.settings.isAiConfigured
+                          ? s.aiCheckCardBtn
+                          : s.aiCheckSetupBtn,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 14),
 
             // Submission Portal Card (Stitch #12)

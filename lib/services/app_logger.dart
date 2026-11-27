@@ -65,8 +65,15 @@ class AppLogger extends ChangeNotifier {
   static const String _fileName = 'app_logs.json';
 
   static final RegExp _secretKvRx = RegExp(
-    r'(password|eclass_password|ins_password|txtpw|wstoken|token|moodlesession|asp\.net_sessionid|sesskey|draftitemid|cookie|authorization)(\s*[=:]\s*["\x27]?|\s+)([^\s&",}\]\x27]+)',
+    r'(password|eclass_password|ins_password|txtpw|wstoken|token|moodlesession|asp\.net_sessionid|sesskey|draftitemid|cookie|authorization|api_key|apikey|x-goog-api-key)(\s*[=:]\s*["\x27]?|\s+)(?:Bearer\s+)?([^\s&",}\]\x27]+)',
     caseSensitive: false,
+  );
+  static final RegExp _bearerRx = RegExp(
+    r'\bBearer\s+[A-Za-z0-9._\-~+/]+=*',
+    caseSensitive: false,
+  );
+  static final RegExp _apiKeyPrefixRx = RegExp(
+    r'\b(?:sk-[A-Za-z0-9_\-]{8,}|AIza[0-9A-Za-z_\-]{12,}|gsk_[A-Za-z0-9_\-]{8,})\b',
   );
   static final RegExp _hexTokenRx = RegExp(r'\b[a-fA-F0-9]{32}\b');
   static final RegExp _studentIdRx = RegExp(r'\b[uU]\d{7}\b');
@@ -100,12 +107,14 @@ class AppLogger extends ChangeNotifier {
 
   List<LogEntry> get entries => List.unmodifiable(_entries.reversed);
 
-  /// Scrubs passwords, tokens, session cookies, and student IDs before logging.
+  /// Scrubs passwords, API keys, tokens, session cookies, and student IDs before logging.
   static String sanitize(String input) {
     if (input.isEmpty) return input;
-    var out = input.replaceAllMapped(_secretKvRx, (m) {
+    var out = input.replaceAll(_bearerRx, 'Bearer ***');
+    out = out.replaceAllMapped(_secretKvRx, (m) {
       return '${m.group(1)}${m.group(2)}***';
     });
+    out = out.replaceAll(_apiKeyPrefixRx, '***');
     out = out.replaceAll(_hexTokenRx, '***');
     out = out.replaceAll(_studentIdRx, 'U*******');
     return out;

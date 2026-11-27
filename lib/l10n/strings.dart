@@ -942,4 +942,124 @@ class S {
   String get avatarUploadEclassFailedToast => isRu
       ? 'Сохранено локально, но не удалось загрузить в eClass'
       : 'Saved locally, but upload to eClass failed';
+
+  // AI Homework Checker (BYOK)
+  String get aiAssistantSection =>
+      isRu ? 'ИИ-ПОМОЩНИК (СВОЙ КЛЮЧ)' : 'AI ASSISTANT (BYOK)';
+  String get aiAssistantTitle =>
+      isRu ? 'ИИ-проверка ДЗ' : 'AI Homework Checker';
+  String get aiAssistantSub => isRu
+      ? 'Проверка работ относительно задания со своим API-ключом'
+      : 'Check assignments against requirements using your own API key';
+  String get aiConfiguredBadge => isRu ? 'Настроен' : 'Configured';
+  String get aiNotConfiguredBadge => isRu ? 'Не настроен' : 'Not configured';
+  String get aiConfigTitle =>
+      isRu ? 'Настройка ИИ (свой ключ)' : 'AI Setup (Your Own Key)';
+  String get aiConfigPrivacyNote => isRu
+      ? 'Каждый пользователь вводит свой API-ключ: он хранится только на телефоне, а запросы уходят напрямую выбранному провайдеру.'
+      : 'Each user enters their own API key: it is stored only on your device and requests go directly to your chosen provider.';
+  String get aiProviderLabel => isRu ? 'Провайдер' : 'Provider';
+  String get aiBaseUrlLabel => 'Base URL (OpenAI-compatible)';
+  String get aiBaseUrlHint => 'https://api.example.com/v1';
+  String get aiApiKeyLabel => isRu ? 'API-ключ' : 'API Key';
+  String get aiApiKeyHint =>
+      isRu ? 'Вставьте ваш API-ключ' : 'Paste your API key';
+  String get aiModelLabel => isRu ? 'Модель' : 'Model';
+  String get aiModelHint =>
+      isRu ? 'Например: gemini-2.5-flash' : 'e.g. gemini-2.5-flash';
+  String get aiFreeKeyHint => isRu
+      ? 'Бесплатный ключ можно получить в Google AI Studio (Gemini) или OpenRouter (:free). Gemini также умеет читать PDF.'
+      : 'You can get a free API key from Google AI Studio (Gemini) or OpenRouter (:free). Gemini also supports PDF attachments.';
+  String get aiTestConnectionBtn => isRu ? 'Проверить ключ' : 'Test Key';
+  String get aiTestingConnection => isRu ? 'Проверка...' : 'Testing...';
+  String aiConnectionSuccess(String reply) =>
+      isRu ? 'Подключение работает: $reply' : 'Connection works: $reply';
+  String get aiClearKeyBtn => isRu ? 'Очистить ключ' : 'Clear Key';
+  String get aiSavedToast =>
+      isRu ? 'Настройки ИИ сохранены' : 'AI settings saved';
+  String get aiKeyClearedToast => isRu ? 'API-ключ удалён' : 'API key cleared';
+
+  String get aiCheckCardTitle =>
+      isRu ? 'Проверка ДЗ с ИИ' : 'AI Homework Check';
+  String aiCheckCardSubConfigured(String model) => isRu
+      ? 'Модель: $model • Сравнит работу с условием до сдачи'
+      : 'Model: $model • Checks your work against requirements before submitting';
+  String get aiCheckCardSubUnconfigured => isRu
+      ? 'Подключите свой API-ключ в настройках, чтобы проверять работы до сдачи'
+      : 'Add your own API key in Settings to check your work before submitting';
+  String get aiCheckCardBtn => isRu ? 'Проверить с ИИ' : 'Check with AI';
+  String get aiCheckSetupBtn => isRu ? 'Подключить ключ' : 'Configure Key';
+  String get aiReviewTitle => isRu ? 'ИИ-проверка ДЗ' : 'AI Homework Check';
+  String get aiNotConfiguredTitle =>
+      isRu ? 'API-ключ не настроен' : 'API Key Not Configured';
+  String get aiNotConfiguredDesc => isRu
+      ? 'Добавьте свой API-ключ (например, бесплатный от Google Gemini или OpenRouter), чтобы проверить решение относительно задания.'
+      : 'Add your own API key (e.g. free Google Gemini or OpenRouter) to review your solution against the assignment prompt.';
+  String get aiOpenSettingsBtn => isRu ? 'Настроить ключ' : 'Configure Key';
+  String get aiModeLabel => isRu ? 'Режим проверки' : 'Check Mode';
+  String get aiModeRequirements => isRu ? 'По пунктам' : 'Requirements';
+  String get aiModeBugs =>
+      isRu ? 'Ошибки и крайние случаи' : 'Bugs & Edge Cases';
+  String get aiModeStrict => isRu ? 'Строгий грейдер' : 'Strict Grader';
+  String get aiSourcesLabel =>
+      isRu ? 'Материалы для проверки' : 'Materials to Check';
+  String get aiPickFileBtn =>
+      isRu ? 'Выбрать файл с телефона' : 'Pick File from Device';
+  String aiUseDraftLabel(String name) =>
+      isRu ? 'Черновик: $name' : 'Draft: $name';
+  String aiUsePickedLabel(String name) =>
+      isRu ? 'Выбранный файл: $name' : 'Selected file: $name';
+  String get aiUseSubmittedLabel =>
+      isRu ? 'Прикрепить сданную работу' : 'Include submitted work';
+  String get aiIncludeSpecFilesLabel =>
+      isRu ? 'Прикрепить файлы из условия' : 'Attach assignment spec files';
+  String get aiPasteSolutionLabel =>
+      isRu ? 'Или вставьте код / текст решения' : 'Or paste code / solution text';
+  String get aiPasteSolutionHint => isRu
+      ? 'Вставьте код, текст ответа или заметки...'
+      : 'Paste your code, answer, or notes...';
+  String get aiRunCheckBtn => isRu ? 'Запустить проверку' : 'Run AI Check';
+  String get aiRerunCheckBtn => isRu ? 'Проверить снова' : 'Check Again';
+  String get aiRunningCheck =>
+      isRu ? 'ИИ анализирует работу...' : 'AI is reviewing your work...';
+  String get aiNeedContentError => isRu
+      ? 'Добавьте файл или вставьте решение (либо убедитесь, что в задании есть текст условия)'
+      : 'Attach a file, paste your solution, or include assignment instructions';
+  String get aiSkippedFilesTitle =>
+      isRu ? 'Пропущенные файлы' : 'Skipped Files';
+  String aiSkipReasonText(String code) {
+    return switch (code) {
+      'pdf_requires_gemini' => isRu
+          ? 'Отправка PDF поддерживается только для Google Gemini'
+          : 'PDF attachments are only supported with Google Gemini',
+      'too_large' => isRu
+          ? 'Файл слишком большой для прямой отправки'
+          : 'File is too large for inline upload',
+      'file_missing' =>
+        isRu ? 'Файл не найден на устройстве' : 'File not found on device',
+      _ => isRu
+          ? 'Неподдерживаемый бинарный формат (вставьте текст вручную)'
+          : 'Unsupported binary format (paste text manually)',
+    };
+  }
+
+  String get aiDisclaimer => isRu
+      ? 'Предварительная ИИ-проверка по вашему ключу. Это не официальная оценка и не замена проверке преподавателя.'
+      : 'Pre-submission AI review using your own key. Not an official grade or guarantee.';
+  String get aiSummaryTitle => isRu ? 'Итог проверки' : 'Summary';
+  String get aiEstimatedScoreLabel => isRu ? 'Ориентир' : 'Estimate';
+  String get aiChecklistTitle =>
+      isRu ? 'Чек-лист требований' : 'Requirements Checklist';
+  String get aiStatusMet => isRu ? 'Выполнено' : 'Met';
+  String get aiStatusPartial => isRu ? 'Частично' : 'Partial';
+  String get aiStatusMissing => isRu ? 'Не найдено' : 'Missing';
+  String get aiIssuesTitle => isRu ? 'Замечания и ошибки' : 'Issues & Gaps';
+  String get aiSuggestionsTitle => isRu ? 'Что доработать' : 'Next Steps';
+  String get aiCopyReportBtn => isRu ? 'Копировать' : 'Copy';
+  String get aiReportCopiedToast =>
+      isRu ? 'Отчёт скопирован' : 'Report copied';
+  String get aiClearReportBtn => isRu ? 'Сбросить' : 'Clear';
+  String get aiCachedNotice => isRu
+      ? 'Сохранённый результат прошлой проверки'
+      : 'Saved result from your previous check';
 }

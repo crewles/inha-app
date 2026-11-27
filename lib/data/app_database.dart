@@ -278,6 +278,8 @@ class AppDatabase {
       await txn.delete('hidden_assignments');
       await txn.delete('local_drafts');
       await txn.delete('eclass_private_files');
+      await txn.delete('ai_reviews');
+      await txn.delete('settings', where: 'key = ?', whereArgs: ['ai_api_key']);
     });
   }
 
@@ -326,6 +328,10 @@ class AppDatabase {
       lastSyncAt: int.tryParse(map['last_sync_at'] ?? '0') ?? 0,
       hapticsEnabled: (map['haptics_enabled'] ?? 'true') == 'true',
       diagnosticsEnabled: (map['diagnostics_enabled'] ?? 'false') == 'true',
+      aiProvider: map['ai_provider'] ?? 'gemini',
+      aiBaseUrl: map['ai_base_url'] ?? '',
+      aiApiKey: map['ai_api_key'] ?? '',
+      aiModel: map['ai_model'] ?? 'gemini-2.5-flash',
     );
   }
 
@@ -648,6 +654,21 @@ class AppDatabase {
         file_type TEXT NOT NULL DEFAULT ''
       )
     ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ai_reviews (
+        assignment_id TEXT PRIMARY KEY,
+        mode TEXT NOT NULL,
+        provider TEXT NOT NULL DEFAULT '',
+        model TEXT NOT NULL DEFAULT '',
+        summary TEXT NOT NULL DEFAULT '',
+        estimated_score TEXT,
+        checklist_json TEXT NOT NULL DEFAULT '[]',
+        issues_json TEXT NOT NULL DEFAULT '[]',
+        suggestions_json TEXT NOT NULL DEFAULT '[]',
+        raw_markdown TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
   }
 
   Future<List<LocalDraft>> getLocalDrafts() async {
@@ -689,5 +710,37 @@ class AppDatabase {
         );
       }
     });
+  }
+
+  // ── AI Homework Reviews ─────────────────────────────────────
+
+  Future<AiReviewResult?> getAiReview(String assignmentId) async {
+    final db = await database;
+    final rows = await db.query(
+      'ai_reviews',
+      where: 'assignment_id = ?',
+      whereArgs: [assignmentId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return AiReviewResult.fromMap(rows.first);
+  }
+
+  Future<void> saveAiReview(AiReviewResult review) async {
+    final db = await database;
+    await db.insert(
+      'ai_reviews',
+      review.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> deleteAiReview(String assignmentId) async {
+    final db = await database;
+    await db.delete(
+      'ai_reviews',
+      where: 'assignment_id = ?',
+      whereArgs: [assignmentId],
+    );
   }
 }

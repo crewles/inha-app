@@ -7,8 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/ai_review_service.dart';
 import '../../services/update_service.dart';
 import '../../state/app_state.dart';
+import '../widgets/ai_config_sheet.dart';
 import '../widgets/app_haptics.dart';
 import '../widgets/expressive_sheets.dart';
 import '../widgets/expressive_widgets.dart';
@@ -1005,6 +1007,80 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // ── AI ASSISTANT (BYOK) ──────────────────────────────
+          _sectionLabel(tt, cs, s.aiAssistantSection),
+          ExpressiveCard(
+            borderRadius: 24,
+            padding: const EdgeInsets.all(16),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(14),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                key: const ValueKey('settings_ai_config_tile'),
+                borderRadius: BorderRadius.circular(14),
+                onTap: () {
+                  AppHaptics.selection();
+                  showAiConfigSheet(context);
+                },
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                  child: Row(
+                    children: [
+                      SquircleIcon(
+                        size: 40,
+                        radius: 14,
+                        iconSize: 20,
+                        icon: Icons.auto_awesome_rounded,
+                        backgroundColor: cs.primaryFixed,
+                        iconColor: cs.onPrimaryFixed,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              s.aiAssistantTitle,
+                              style: tt.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              settings.isAiConfigured
+                                  ? '${AiReviewService.presetFor(settings.aiProvider).label} • ${settings.aiModel}'
+                                  : s.aiAssistantSub,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: tt.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ExpressivePill(
+                        label: settings.isAiConfigured
+                            ? s.aiConfiguredBadge
+                            : s.aiNotConfiguredBadge,
+                        backgroundColor: settings.isAiConfigured
+                            ? cs.secondaryFixed
+                            : cs.surfaceContainerHigh,
+                        foregroundColor: settings.isAiConfigured
+                            ? cs.onSecondaryFixed
+                            : cs.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 20),

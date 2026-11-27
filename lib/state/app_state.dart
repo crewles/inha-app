@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../data/app_database.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
+import '../services/ai_review_service.dart';
 import '../services/app_logger.dart';
 import '../services/eclass_service.dart';
 import '../services/ins_service.dart';
@@ -25,6 +26,7 @@ class AppState extends ChangeNotifier {
   final InsService _ins = InsService();
   final TimetableService _timetable = TimetableService();
   final UpdateService _updater = UpdateService();
+  final AiReviewService aiReviewer = AiReviewService();
 
   bool isInitializing = true;
   bool isSyncing = false;
@@ -49,6 +51,7 @@ class AppState extends ChangeNotifier {
   final Map<String, List<SyllabusWeight>> syllabusWeightsByCourse = {};
   final Map<String, AttendanceData?> attendanceByCourse = {};
   final Map<String, List<CourseFile>> filesByCourse = {};
+  final Map<String, AiReviewResult> aiReviewsByAssignment = {};
   InsGradeData? insData;
   List<ScheduleEntry> timetableEntries = [];
   String timetableLabel = '';
@@ -438,9 +441,11 @@ class AppState extends ChangeNotifier {
     settings = settings.copyWith(
       timetableGroup: '',
       timetableGroupAutoDetected: false,
+      aiApiKey: '',
     );
     await _db.saveSetting('timetable_group', '');
     await _db.saveSetting('timetable_group_auto_detected', 'false');
+    await _db.saveSetting('ai_api_key', '');
     credentials = null;
     profileAvatarPath = null;
     hasCustomAvatar = false;
@@ -454,6 +459,7 @@ class AppState extends ChangeNotifier {
     syllabusWeightsByCourse.clear();
     attendanceByCourse.clear();
     filesByCourse.clear();
+    aiReviewsByAssignment.clear();
     insData = null;
     timetableEntries = [];
     timetableLabel = '';
@@ -915,6 +921,10 @@ class AppState extends ChangeNotifier {
     await _db.saveSetting('haptics_enabled', updated.hapticsEnabled.toString());
     await _db.saveSetting(
         'diagnostics_enabled', updated.diagnosticsEnabled.toString());
+    await _db.saveSetting('ai_provider', updated.aiProvider);
+    await _db.saveSetting('ai_base_url', updated.aiBaseUrl);
+    await _db.saveSetting('ai_api_key', updated.aiApiKey);
+    await _db.saveSetting('ai_model', updated.aiModel);
     AppLogger.instance.enabled = updated.diagnosticsEnabled;
     notifyListeners();
 
@@ -1151,5 +1161,30 @@ class AppState extends ChangeNotifier {
     } else {
       await syncAllAssignments();
     }
+  }
+
+  // ── AI Homework Reviews ─────────────────────────────────────
+
+  Future<AiReviewResult?> loadAiReview(String assignmentId) async {
+    final cached = aiReviewsByAssignment[assignmentId];
+    if (cached != null) return cached;
+    final fromDb = await _db.getAiReview(assignmentId);
+    if (fromDb != null) {
+      aiReviewsByAssignment[assignmentId] = fromDb;
+      notifyListeners();
+    }
+    return fromDb;
+  }
+
+  Future<void> saveAiReview(AiReviewResult review) async {
+    aiReviewsByAssignment[review.assignmentId] = review;
+    await _db.saveAiReview(review);
+    notifyListeners();
+  }
+
+  Future<void> clearAiReview(String assignmentId) async {
+    aiReviewsByAssignment.remove(assignmentId);
+    await _db.deleteAiReview(assignmentId);
+    notifyListeners();
   }
 }

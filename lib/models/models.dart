@@ -620,6 +620,10 @@ class AppSettings {
   final int lastSyncAt;
   final bool hapticsEnabled;
   final bool diagnosticsEnabled;
+  final String aiProvider; // gemini | openai | openrouter | groq | custom
+  final String aiBaseUrl;
+  final String aiApiKey;
+  final String aiModel;
 
   const AppSettings({
     this.themeMode = 'system',
@@ -638,7 +642,16 @@ class AppSettings {
     this.lastSyncAt = 0,
     this.hapticsEnabled = true,
     this.diagnosticsEnabled = false,
+    this.aiProvider = 'gemini',
+    this.aiBaseUrl = '',
+    this.aiApiKey = '',
+    this.aiModel = 'gemini-2.5-flash',
   });
+
+  bool get isAiConfigured =>
+      aiApiKey.trim().isNotEmpty &&
+      aiModel.trim().isNotEmpty &&
+      (aiProvider != 'custom' || aiBaseUrl.trim().isNotEmpty);
 
   AppSettings copyWith({
     String? themeMode,
@@ -657,6 +670,10 @@ class AppSettings {
     int? lastSyncAt,
     bool? hapticsEnabled,
     bool? diagnosticsEnabled,
+    String? aiProvider,
+    String? aiBaseUrl,
+    String? aiApiKey,
+    String? aiModel,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -677,6 +694,10 @@ class AppSettings {
       lastSyncAt: lastSyncAt ?? this.lastSyncAt,
       hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
       diagnosticsEnabled: diagnosticsEnabled ?? this.diagnosticsEnabled,
+      aiProvider: aiProvider ?? this.aiProvider,
+      aiBaseUrl: aiBaseUrl ?? this.aiBaseUrl,
+      aiApiKey: aiApiKey ?? this.aiApiKey,
+      aiModel: aiModel ?? this.aiModel,
     );
   }
 }
@@ -854,4 +875,170 @@ class EclassPrivateFile {
         downloadUrl: (m['download_url'] as String?) ?? '',
         fileType: (m['file_type'] as String?) ?? '',
       );
+}
+
+enum AiCheckMode { requirements, bugsAndEdgeCases, strictGrader }
+
+class AiRequirementItem {
+  final String requirement;
+
+  /// One of `'met'`, `'partial'`, or `'missing'`.
+  final String status;
+  final String note;
+
+  const AiRequirementItem({
+    required this.requirement,
+    required this.status,
+    this.note = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+        'requirement': requirement,
+        'status': status,
+        'note': note,
+      };
+
+  factory AiRequirementItem.fromJson(Map<String, dynamic> json) {
+    final rawStatus =
+        (json['status'] ?? 'partial').toString().trim().toLowerCase();
+    final normalizedStatus = switch (rawStatus) {
+      'met' || 'done' || 'ok' || 'pass' || 'passed' => 'met',
+      'missing' || 'fail' || 'failed' || 'not_met' => 'missing',
+      _ => 'partial',
+    };
+    return AiRequirementItem(
+      requirement: (json['requirement'] ?? '').toString().trim(),
+      status: normalizedStatus,
+      note: (json['note'] ?? '').toString().trim(),
+    );
+  }
+}
+
+class AiReviewResult {
+  final String assignmentId;
+  final AiCheckMode mode;
+  final String provider;
+  final String model;
+  final String summary;
+  final String? estimatedScore;
+  final List<AiRequirementItem> checklist;
+  final List<String> issues;
+  final List<String> suggestions;
+  final String rawMarkdown;
+  final int createdAt;
+
+  const AiReviewResult({
+    required this.assignmentId,
+    required this.mode,
+    required this.provider,
+    required this.model,
+    this.summary = '',
+    this.estimatedScore,
+    this.checklist = const [],
+    this.issues = const [],
+    this.suggestions = const [],
+    this.rawMarkdown = '',
+    this.createdAt = 0,
+  });
+
+  bool get hasStructuredContent =>
+      summary.isNotEmpty ||
+      checklist.isNotEmpty ||
+      issues.isNotEmpty ||
+      suggestions.isNotEmpty;
+
+  Map<String, Object?> toMap() => {
+        'assignment_id': assignmentId,
+        'mode': mode.name,
+        'provider': provider,
+        'model': model,
+        'summary': summary,
+        'estimated_score': estimatedScore,
+        'checklist_json': jsonEncode(checklist.map((e) => e.toJson()).toList()),
+        'issues_json': jsonEncode(issues),
+        'suggestions_json': jsonEncode(suggestions),
+        'raw_markdown': rawMarkdown,
+        'created_at': createdAt,
+      };
+
+  factory AiReviewResult.fromMap(Map<String, Object?> m) {
+    List<AiRequirementItem> parseChecklist(String? raw) {
+      if (raw == null || raw.isEmpty) return const [];
+      try {
+        final decoded = jsonDecode(raw) as List<dynamic>;
+        return decoded
+            .whereType<Map>()
+            .map((e) => AiRequirementItem.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+      } catch (_) {
+        return const [];
+      }
+    }
+
+    List<String> parseStrings(String? raw) {
+      if (raw == null || raw.isEmpty) return const [];
+      try {
+        final decoded = jsonDecode(raw) as List<dynamic>;
+        return decoded.map((e) => e.toString()).toList();
+      } catch (_) {
+        return const [];
+      }
+    }
+
+    final modeName = (m['mode'] as String?) ?? AiCheckMode.requirements.name;
+    final parsedMode = AiCheckMode.values.firstWhere(
+      (v) => v.name == modeName,
+      orElse: () => AiCheckMode.requirements,
+    );
+
+    return AiReviewResult(
+      assignmentId: (m['assignment_id'] as String?) ?? '',
+      mode: parsedMode,
+      provider: (m['provider'] as String?) ?? '',
+      model: (m['model'] as String?) ?? '',
+      summary: (m['summary'] as String?) ?? '',
+      estimatedScore: m['estimated_score'] as String?,
+      checklist: parseChecklist(m['checklist_json'] as String?),
+      issues: parseStrings(m['issues_json'] as String?),
+      suggestions: parseStrings(m['suggestions_json'] as String?),
+      rawMarkdown: (m['raw_markdown'] as String?) ?? '',
+      createdAt: (m['created_at'] as int?) ?? 0,
+    );
+  }
+
+  String toShareableText() {
+    final buf = StringBuffer();
+    buf.writeln('AI Homework Check ($provider / $model)');
+    if (estimatedScore != null && estimatedScore!.trim().isNotEmpty) {
+      buf.writeln('Estimated score: ${estimatedScore!.trim()}');
+    }
+    if (summary.trim().isNotEmpty) {
+      buf.writeln('\nSummary:\n${summary.trim()}');
+    }
+    if (checklist.isNotEmpty) {
+      buf.writeln('\nRequirements Checklist:');
+      for (final item in checklist) {
+        final tag = item.status.toUpperCase();
+        buf.write('- [$tag] ${item.requirement}');
+        if (item.note.isNotEmpty) buf.write(' — ${item.note}');
+        buf.writeln();
+      }
+    }
+    if (issues.isNotEmpty) {
+      buf.writeln('\nIssues / Gaps:');
+      for (final issue in issues) {
+        buf.writeln('- $issue');
+      }
+    }
+    if (suggestions.isNotEmpty) {
+      buf.writeln('\nSuggestions:');
+      for (final sug in suggestions) {
+        buf.writeln('- $sug');
+      }
+    }
+    if (!hasStructuredContent && rawMarkdown.trim().isNotEmpty) {
+      buf.writeln('\n${rawMarkdown.trim()}');
+    }
+    return buf.toString().trim();
+  }
 }

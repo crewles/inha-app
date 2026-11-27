@@ -1,8 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:inhahub/models/models.dart';
+import 'package:inhahub/services/ai_review_service.dart';
 import 'package:inhahub/services/app_logger.dart';
 import 'package:inhahub/services/eclass_service.dart';
 import 'package:inhahub/services/gpa_calculator.dart';
@@ -379,6 +385,39 @@ class FakeAppState extends AppState {
   Future<UpdateCheckResult> checkForUpdate({bool silent = false}) async {
     return const UpdateCheckResult(status: UpdateCheckStatus.upToDate);
   }
+
+  @override
+  Future<AiReviewResult?> loadAiReview(String assignmentId) async {
+    return aiReviewsByAssignment[assignmentId];
+  }
+
+  @override
+  Future<void> saveAiReview(AiReviewResult review) async {
+    aiReviewsByAssignment[review.assignmentId] = review;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> clearAiReview(String assignmentId) async {
+    aiReviewsByAssignment.remove(assignmentId);
+    notifyListeners();
+  }
+}
+
+class _FakeHttpAdapter implements HttpClientAdapter {
+  final Future<ResponseBody> Function(RequestOptions options) handler;
+  _FakeHttpAdapter(this.handler);
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) =>
+      handler(options);
+
+  @override
+  void close({bool force = false}) {}
 }
 
 Widget _wrap(AppState state, Widget child, {bool dark = false}) {
@@ -1853,5 +1892,373 @@ void main() {
     expect(fields['lang'], 'en');
     expect(fields.containsKey('deletepicture'), isFalse);
     expect(fields.containsKey('submitbutton'), isFalse);
+  });
+
+  test('AppLogger.sanitize masks API keys and Bearer tokens', () {
+    final sanitized = AppLogger.sanitize(
+      'Authorization: Bearer my.secret.jwt.token '
+      'Bearer standalone.jwt.token '
+      'api_key=abc123456 '
+      'x-goog-api-key=AIzaSyDummyKey1234567890 '
+      'openai=sk-proj-secretKey987654321 '
+      'groq=gsk_secretGroqKey987654321 '
+      'gemini=AIzaSyAnotherFakeKey987654',
+    );
+    expect(sanitized, isNot(contains('my.secret.jwt.token')));
+    expect(sanitized, isNot(contains('standalone.jwt.token')));
+    expect(sanitized, isNot(contains('abc123456')));
+    expect(sanitized, isNot(contains('AIzaSyDummyKey1234567890')));
+    expect(sanitized, isNot(contains('sk-proj-secretKey987654321')));
+    expect(sanitized, isNot(contains('gsk_secretGroqKey987654321')));
+    expect(sanitized, isNot(contains('AIzaSyAnotherFakeKey987654')));
+    expect(sanitized, contains('Bearer ***'));
+  });
+
+  test('AiReviewService.parseReviewResponse parses fenced JSON and falls back cleanly',
+      () {
+    const fenced = '''
+Here is your review:
+```json
+{
+  "summary": "Mostly complete, one edge case missing.",
+  "estimated_score": "18/20",
+  "checklist": [
+    {"requirement": "Left rotation", "status": "met", "note": "Implemented properly"},
+    {"requirement": "Empty tree guard", "status": "missing", "note": "No null root check"}
+  ],
+  "issues": ["Possible null dereference when root is null"],
+  "suggestions": ["Add an early return for root == nullptr"]
+}
+```
+''';
+    final parsed = AiReviewService.parseReviewResponse(
+      fenced,
+      assignmentId: '101::1',
+      mode: AiCheckMode.requirements,
+      provider: 'gemini',
+      model: 'gemini-2.5-flash',
+    );
+    expect(parsed.hasStructuredContent, isTrue);
+    expect(parsed.summary, 'Mostly complete, one edge case missing.');
+    expect(parsed.estimatedScore, '18/20');
+    expect(parsed.checklist.length, 2);
+    expect(parsed.checklist.first.status, 'met');
+    expect(parsed.checklist.last.status, 'missing');
+    expect(parsed.issues, ['Possible null dereference when root is null']);
+    expect(parsed.suggestions, ['Add an early return for root == nullptr']);
+
+    final fallback = AiReviewService.parseReviewResponse(
+      'Plain markdown response without JSON.',
+      assignmentId: '101::1',
+      mode: AiCheckMode.bugsAndEdgeCases,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+    );
+    expect(fallback.hasStructuredContent, isFalse);
+    expect(fallback.rawMarkdown, 'Plain markdown response without JSON.');
+  });
+
+  test('AiReviewService.reviewHomework sends proper Gemini and OpenAI-compatible headers',
+      () async {
+    RequestOptions? capturedGemini;
+    final geminiDio = Dio()
+      ..httpClientAdapter = _FakeHttpAdapter((options) async {
+        capturedGemini = options;
+        final payload = jsonEncode({
+          'candidates': [
+            {
+              'content': {
+                'parts': [
+                  {
+                    'text': jsonEncode({
+                      'summary': 'Looks solid',
+                      'estimated_score': '19/20',
+                      'checklist': [
+                        {
+                          'requirement': 'Complexity',
+                          'status': 'met',
+                          'note': 'O(log n)'
+                        }
+                      ],
+                      'issues': <String>[],
+                      'suggestions': <String>[],
+                    }),
+                  }
+                ],
+              },
+            }
+          ],
+        });
+        return ResponseBody.fromString(
+          payload,
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      });
+
+    final geminiService = AiReviewService(dio: geminiDio);
+    final assignment = FakeAppState().allAssignments.first;
+    final geminiRes = await geminiService.reviewHomework(
+      settings: const AppSettings(
+        language: 'en',
+        aiProvider: 'gemini',
+        aiApiKey: 'AIzaTestSecretKey123456',
+        aiModel: 'gemini-2.5-flash',
+      ),
+      assignment: assignment,
+      mode: AiCheckMode.requirements,
+      attachments: const [],
+      pastedSolution: 'void rotateLeft() {}',
+    );
+    expect(capturedGemini, isNotNull);
+    expect(capturedGemini!.uri.queryParameters.containsKey('key'), isFalse);
+    expect(
+      capturedGemini!.headers['x-goog-api-key'],
+      'AIzaTestSecretKey123456',
+    );
+    final genCfg = (capturedGemini!.data as Map)['generationConfig']
+        as Map<String, dynamic>;
+    expect(genCfg['responseMimeType'], 'application/json');
+    expect(genCfg['maxOutputTokens'], 8192);
+    expect(geminiRes.summary, 'Looks solid');
+
+    RequestOptions? capturedOpenAi;
+    final openaiDio = Dio()
+      ..httpClientAdapter = _FakeHttpAdapter((options) async {
+        capturedOpenAi = options;
+        final payload = jsonEncode({
+          'choices': [
+            {
+              'message': {
+                'content': jsonEncode({
+                  'summary': 'Checked via OpenAI-compatible',
+                  'estimated_score': '17/20',
+                  'checklist': [],
+                  'issues': ['Missing test'],
+                  'suggestions': ['Add unit test'],
+                }),
+              },
+            }
+          ],
+        });
+        return ResponseBody.fromString(
+          payload,
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      });
+
+    final openaiService = AiReviewService(dio: openaiDio);
+    final openaiRes = await openaiService.reviewHomework(
+      settings: const AppSettings(
+        language: 'en',
+        aiProvider: 'openrouter',
+        aiApiKey: 'sk-or-test-key-123456',
+        aiModel: 'google/gemini-2.0-flash-exp:free',
+      ),
+      assignment: assignment,
+      mode: AiCheckMode.strictGrader,
+      attachments: const [],
+      pastedSolution: 'int main() { return 0; }',
+    );
+    expect(capturedOpenAi, isNotNull);
+    expect(
+      capturedOpenAi!.uri.toString(),
+      'https://openrouter.ai/api/v1/chat/completions',
+    );
+    expect(
+      capturedOpenAi!.headers['Authorization'],
+      'Bearer sk-or-test-key-123456',
+    );
+    expect(openaiRes.issues, ['Missing test']);
+  });
+
+  testWidgets('SettingsScreen renders AI BYOK tile and opens AiConfigSheet',
+      (tester) async {
+    final app = FakeAppState();
+    await tester.pumpWidget(_wrap(app, const SettingsScreen()));
+    await tester.pumpAndSettle();
+
+    final tile = find.byKey(const ValueKey('settings_ai_config_tile'));
+    await tester.scrollUntilVisible(
+      tile,
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(tile, findsOneWidget);
+    expect(find.text('Not configured'), findsOneWidget);
+
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('ai_config_sheet')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ai_api_key_field')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ai_model_field')), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('ai_api_key_field')),
+      'AIzaWidgetTestKey123456',
+    );
+    final saveBtn = find.byKey(const ValueKey('ai_save_btn'));
+    await tester.ensureVisible(saveBtn);
+    await tester.pumpAndSettle();
+    await tester.tap(saveBtn);
+    await tester.pumpAndSettle();
+
+    expect(app.settings.isAiConfigured, isTrue);
+    expect(app.settings.aiApiKey, 'AIzaWidgetTestKey123456');
+    expect(find.text('Configured'), findsOneWidget);
+  });
+
+  testWidgets(
+      'AssignmentDetailScreen renders AI Homework Check card and opens AiReviewSheet',
+      (tester) async {
+    final app = FakeAppState();
+    await tester.pumpWidget(
+      _wrap(app, AssignmentDetailScreen(assignment: app.allAssignments.first)),
+    );
+    await tester.pumpAndSettle();
+
+    final checkBtn = find.byKey(const ValueKey('ad_ai_check_btn'));
+    await tester.scrollUntilVisible(
+      checkBtn,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(ListView).first, const Offset(0, -160));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ad_ai_check_card')), findsOneWidget);
+
+    await tester.tap(checkBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('ai_review_sheet')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('ai_review_open_config_btn')),
+      findsOneWidget,
+    );
+  });
+
+  test('AiAttachment.fromFile extracts text from docx and zip archives',
+      () async {
+    Uint8List buildTestZip(Map<String, List<int>> files) {
+      final out = BytesBuilder();
+      final cd = BytesBuilder();
+      int entryCount = 0;
+
+      void writeU16(BytesBuilder b, int v) =>
+          b.add([v & 0xff, (v >> 8) & 0xff]);
+      void writeU32(BytesBuilder b, int v) => b.add([
+            v & 0xff,
+            (v >> 8) & 0xff,
+            (v >> 16) & 0xff,
+            (v >> 24) & 0xff,
+          ]);
+
+      for (final e in files.entries) {
+        final nameBytes = utf8.encode(e.key);
+        final raw = e.value;
+        final compressed = ZLibEncoder(raw: true).convert(raw);
+        final localOffset = out.length;
+
+        writeU32(out, 0x04034b50);
+        writeU16(out, 20);
+        writeU16(out, 0);
+        writeU16(out, 8);
+        writeU16(out, 0);
+        writeU16(out, 0);
+        writeU32(out, 0);
+        writeU32(out, compressed.length);
+        writeU32(out, raw.length);
+        writeU16(out, nameBytes.length);
+        writeU16(out, 0);
+        out.add(nameBytes);
+        out.add(compressed);
+
+        writeU32(cd, 0x02014b50);
+        writeU16(cd, 20);
+        writeU16(cd, 20);
+        writeU16(cd, 0);
+        writeU16(cd, 8);
+        writeU16(cd, 0);
+        writeU16(cd, 0);
+        writeU32(cd, 0);
+        writeU32(cd, compressed.length);
+        writeU32(cd, raw.length);
+        writeU16(cd, nameBytes.length);
+        writeU16(cd, 0);
+        writeU16(cd, 0);
+        writeU16(cd, 0);
+        writeU16(cd, 0);
+        writeU32(cd, 0);
+        writeU32(cd, localOffset);
+        cd.add(nameBytes);
+        entryCount++;
+      }
+
+      final cdOffset = out.length;
+      final cdBytes = cd.toBytes();
+      out.add(cdBytes);
+      writeU32(out, 0x06054b50);
+      writeU16(out, 0);
+      writeU16(out, 0);
+      writeU16(out, entryCount);
+      writeU16(out, entryCount);
+      writeU32(out, cdBytes.length);
+      writeU32(out, cdOffset);
+      writeU16(out, 0);
+      return out.toBytes();
+    }
+
+    final tmpDir = await Directory.systemTemp.createTemp('inhahub_zip_test_');
+    try {
+      const docXml = '''
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>Lab 11: JDBC CRUD</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Use try-with-resources</w:t></w:r></w:p>
+  </w:body>
+</w:document>
+''';
+      final docxFile = File('${tmpDir.path}/11Lab_APJ_fall2026.docx');
+      await docxFile.writeAsBytes(
+        buildTestZip({'word/document.xml': utf8.encode(docXml.trim())}),
+      );
+      final docxAtt = await AiAttachment.fromFile(
+        docxFile.path,
+        role: 'spec',
+        supportsPdf: false,
+      );
+      expect(docxAtt.isIncluded, isTrue);
+      expect(docxAtt.skippedReason, isNull);
+      expect(docxAtt.textContent, contains('Lab 11: JDBC CRUD'));
+      expect(docxAtt.textContent, contains('Use try-with-resources'));
+
+      final zipFile = File('${tmpDir.path}/solution.zip');
+      await zipFile.writeAsBytes(
+        buildTestZip({
+          'src/Main.java': utf8.encode('public class Main { }'),
+          'build/Main.class': [0xca, 0xfe, 0xba, 0xbe],
+        }),
+      );
+      final zipAtt = await AiAttachment.fromFile(
+        zipFile.path,
+        role: 'submission',
+        supportsPdf: false,
+      );
+      expect(zipAtt.isIncluded, isTrue);
+      expect(zipAtt.textContent, contains('src/Main.java'));
+      expect(zipAtt.textContent, contains('public class Main { }'));
+      expect(zipAtt.textContent, isNot(contains('Main.class')));
+    } finally {
+      if (await tmpDir.exists()) {
+        await tmpDir.delete(recursive: true);
+      }
+    }
   });
 }
